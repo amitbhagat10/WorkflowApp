@@ -14,12 +14,33 @@ export default function LoginPage() {
     setLoading(true);
     setMessage("");
 
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const approvalCheck = await supabase.rpc("is_email_approved", {
+      input_email: normalizedEmail,
+    });
+
+    if (approvalCheck.error) {
+      setLoading(false);
+      setMessage(approvalCheck.error.message);
+      return;
+    }
+
+    if (!approvalCheck.data) {
+      setLoading(false);
+      setMessage(
+        "This email is not approved to access HandyFlow. Please contact the admin."
+      );
+      return;
+    }
+
     const redirectUrl = `${window.location.origin}/auth/callback`;
 
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      email: normalizedEmail,
       options: {
         emailRedirectTo: redirectUrl,
+        shouldCreateUser: false,
       },
     });
 
@@ -55,7 +76,7 @@ export default function LoginPage() {
           </div>
 
           <button disabled={loading} className="btn-primary w-full">
-            {loading ? "Sending..." : "Send login link"}
+            {loading ? "Checking..." : "Send login link"}
           </button>
         </form>
 
