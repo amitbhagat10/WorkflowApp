@@ -320,3 +320,37 @@ body {
   border-color: rgba(216, 208, 193, 0.8) !important;
   box-shadow: 0 18px 45px rgba(43, 41, 38, 0.055) !important;
 }
+/* Remove remaining blue theme and force executive palette */
+[class*="text-blue-"] {
+  color: #2b2926 !important;
+}
+
+[class*="bg-blue-"] {
+  background-color: #f4efe4 !important;
+}
+
+[class*="border-blue-"] {
+  border-color: #d8d0c1 !important;
+}
+
+[class*="ring-blue-"] {
+  --tw-ring-color: rgba(43, 41, 38, 0.18) !important;
+}
+
+[class*="shadow-blue-"] {
+  --tw-shadow-color: rgba(43, 41, 38, 0.16) !important;
+}
+
+/* Executive link/action colour */
+a {
+  color: inherit;
+}
+
+.card a:not(.btn-primary):not(.btn-secondary):not(.btn-danger) {
+  color: #2b2926 !important;
+  font-weight: 700;
+}
+
+.card a:not(.btn-primary):not(.btn-secondary):not(.btn-danger):hover {
+  color: #b08d57 !important;
+}
