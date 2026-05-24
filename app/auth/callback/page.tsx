@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [message, setMessage] = useState("Signing you in...");
 
   useEffect(() => {
@@ -14,6 +13,7 @@ export default function AuthCallbackPage() {
   }, []);
 
   async function handleCallback() {
+    const searchParams = new URLSearchParams(window.location.search);
     const code = searchParams.get("code");
 
     if (code) {
@@ -25,7 +25,12 @@ export default function AuthCallbackPage() {
       }
     }
 
-    const { data } = await supabase.auth.getSession();
+    const { data, error } = await supabase.auth.getSession();
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
 
     if (!data.session) {
       setMessage("Login session was not created. Please try signing in again.");
@@ -38,7 +43,7 @@ export default function AuthCallbackPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold">HandyFlow</h1>
+        <h1 className="text-2xl font-bold text-blue-700">HandyFlow</h1>
         <p className="mt-3 text-sm text-gray-500">{message}</p>
       </div>
     </div>
