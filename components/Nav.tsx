@@ -15,12 +15,12 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 
 const links = [
-  { href: "/", label: "Dashboard", icon: Home },
+  { href: "/", label: "Overview", icon: Home },
   { href: "/clients", label: "Clients", icon: Users },
-  { href: "/jobs", label: "Jobs", icon: Wrench },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/jobs", label: "Work Orders", icon: Wrench },
+  { href: "/calendar", label: "Schedule", icon: CalendarDays },
   { href: "/payments", label: "Payments", icon: CreditCard },
-  { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/notifications", label: "Messages", icon: Bell },
   { href: "/invoices", label: "Invoices", icon: FileText },
 ];
 
@@ -51,17 +51,19 @@ export default function Nav() {
   }
 
   return (
-    <aside className="no-print hidden min-h-screen w-72 shrink-0 border-r border-slate-200 bg-white/95 p-5 shadow-sm md:block">
-      <div className="mb-8 rounded-3xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-900/10">
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-xl font-black">
-          HF
+    <aside className="no-print hidden min-h-screen w-72 shrink-0 border-r border-stone-200 bg-[#f8f6f1]/95 p-5 shadow-sm backdrop-blur-xl md:block">
+      <div className="mb-8 rounded-[1.75rem] bg-gradient-to-br from-[#2b2926] via-[#1f1e1c] to-[#11100f] p-5 text-white shadow-xl shadow-stone-900/10">
+        <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#b08d57]/20 text-lg font-black text-[#d8bd82]">
+          WP
         </div>
 
-        <h1 className="text-2xl font-black tracking-tight">Work Flow Pro</h1>
-        <p className="mt-1 text-sm text-blue-100">Field Operations</p>
+        <h1 className="text-2xl font-black tracking-tight">WorkFlow Pro</h1>
+        <p className="mt-1 text-sm text-stone-300">
+          Field service operations platform
+        </p>
 
-        <div className="mt-4 rounded-2xl bg-white/12 px-3 py-2 text-xs font-semibold text-blue-50">
-          Live business workspace
+        <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-stone-200">
+          Executive workspace
         </div>
       </div>
 
@@ -78,15 +80,15 @@ export default function Nav() {
               href={link.href}
               className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 active
-                  ? "bg-blue-50 text-blue-700 shadow-sm"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  ? "bg-[#eee7d8] text-[#2b2926] shadow-sm"
+                  : "text-stone-600 hover:bg-white hover:text-stone-950"
               }`}
             >
               <span
-                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                className={`flex h-9 w-9 items-center justify-center rounded-xl transition ${
                   active
-                    ? "bg-blue-600 text-white"
-                    : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                    ? "bg-[#2b2926] text-[#d8bd82]"
+                    : "bg-stone-100 text-stone-500 group-hover:bg-[#f4efe4] group-hover:text-[#2b2926]"
                 }`}
               >
                 <Icon size={18} />
@@ -98,18 +100,18 @@ export default function Nav() {
         })}
       </nav>
 
-      <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-          Quick Tip
+      <div className="mt-8 rounded-2xl border border-stone-200 bg-white/70 p-4">
+        <p className="text-xs font-black uppercase tracking-wide text-stone-400">
+          Workspace
         </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Use Calendar on mobile to manage today’s jobs on-site.
+        <p className="mt-2 text-sm text-stone-600">
+          Manage work orders, clients, payments, and schedules from one clean view.
         </p>
       </div>
 
       <button
         onClick={signOut}
-        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-stone-200 bg-white/80 px-4 py-3 text-sm font-bold text-stone-600 transition hover:bg-white"
       >
         <LogOut size={17} />
         Sign out
