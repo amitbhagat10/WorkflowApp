@@ -27,9 +27,26 @@ export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const hideNav =
+    pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
+
+  if (hideNav) {
+    return null;
+  }
+
   async function signOut() {
-    await supabase.auth.signOut();
-    router.push("/login");
+    await supabase.auth.signOut({ scope: "global" });
+
+    if (typeof window !== "undefined") {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith("sb-")) {
+          localStorage.removeItem(key);
+        }
+      });
+    }
+
+    router.replace("/login");
+    router.refresh();
   }
 
   return (
