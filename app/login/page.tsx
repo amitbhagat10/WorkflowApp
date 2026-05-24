@@ -29,7 +29,7 @@ export default function LoginPage() {
     if (!approvalCheck.data) {
       setLoading(false);
       setMessage(
-        "This email is not approved to access HandyFlow. Please contact the admin."
+        "This email is not approved to access Work Flow Pro. Please contact the admin."
       );
       return;
     }
@@ -57,7 +57,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-3xl font-bold text-blue-700">HandyFlow</h1>
+        <h1 className="text-3xl font-bold text-blue-700">Work Flow Pro</h1>
         <p className="mt-2 text-sm text-gray-500">
           Sign in to manage clients, jobs, payments, and appointments.
         </p>

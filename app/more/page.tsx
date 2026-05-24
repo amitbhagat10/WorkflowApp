@@ -65,7 +65,7 @@ export default function MorePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold">More</h1>
         <p className="text-gray-500">
-          Quick access to the rest of your HandyFlow tools.
+          Quick access to the rest of your Work Flow Pro tools.
         </p>
       </div>
 

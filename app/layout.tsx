@@ -4,8 +4,8 @@ import Nav from "@/components/Nav";
 import MobileBottomNav from "@/components/MobileBottomNav";
 
 export const metadata: Metadata = {
-  title: "HandyFlow",
-  description: "Handyman job and payment management app",
+  title: "WorkFlow Pro",
+  description: "Field service operations platform",
 };
 
 export default function RootLayout({
@@ -16,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen w-full overflow-x-hidden bg-slate-50">
+        <div className="flex min-h-screen w-full overflow-x-hidden">
           <Nav />
 
           <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-28 md:p-8">

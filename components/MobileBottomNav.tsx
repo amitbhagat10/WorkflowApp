@@ -13,8 +13,8 @@ import {
 const links = [
   { href: "/", label: "Home", icon: Home },
   { href: "/clients", label: "Clients", icon: Users },
-  { href: "/jobs", label: "Jobs", icon: Wrench },
-  { href: "/calendar", label: "Calendar", icon: CalendarDays },
+  { href: "/jobs", label: "Work", icon: Wrench },
+  { href: "/calendar", label: "Schedule", icon: CalendarDays },
   { href: "/more", label: "More", icon: MoreHorizontal },
 ];
 
@@ -29,7 +29,7 @@ export default function MobileBottomNav() {
   }
 
   return (
-    <nav className="no-print fixed bottom-3 left-3 right-3 z-50 rounded-3xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur md:hidden">
+    <nav className="no-print fixed bottom-3 left-3 right-3 z-50 rounded-[1.6rem] border border-stone-200 bg-white/92 shadow-2xl shadow-slate-900/10 backdrop-blur-xl md:hidden">
       <div className="grid grid-cols-5 px-1 py-1.5">
         {links.map((link) => {
           const Icon = link.icon;
@@ -44,8 +44,8 @@ export default function MobileBottomNav() {
               href={link.href}
               className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[11px] font-black transition ${
                 active
-                  ? "bg-blue-600 text-white"
-                  : "text-slate-500 hover:bg-slate-50"
+                  ? "bg-[#23443a] text-white"
+                  : "text-slate-500 hover:bg-stone-50"
               }`}
             >
               <Icon size={19} />

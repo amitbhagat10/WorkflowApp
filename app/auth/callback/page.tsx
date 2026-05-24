@@ -43,7 +43,7 @@ export default function AuthCallbackPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
       <div className="rounded-2xl bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-blue-700">HandyFlow</h1>
+        <h1 className="text-2xl font-bold text-blue-700">Work Flow Pro</h1>
         <p className="mt-3 text-sm text-gray-500">{message}</p>
       </div>
     </div>

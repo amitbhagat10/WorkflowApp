@@ -57,8 +57,8 @@ export default function Nav() {
           HF
         </div>
 
-        <h1 className="text-2xl font-black tracking-tight">HandyFlow</h1>
-        <p className="mt-1 text-sm text-blue-100">Smart handyman manager</p>
+        <h1 className="text-2xl font-black tracking-tight">Work Flow Pro</h1>
+        <p className="mt-1 text-sm text-blue-100">Field Operations</p>
 
         <div className="mt-4 rounded-2xl bg-white/12 px-3 py-2 text-xs font-semibold text-blue-50">
           Live business workspace

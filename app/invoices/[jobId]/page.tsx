@@ -113,10 +113,10 @@ export default function InvoiceDetailPage() {
                 HF
               </div>
 
-              <h2 className="text-2xl font-bold">HandyFlow Services</h2>
+              <h2 className="text-2xl font-bold">Work Flow Services</h2>
 
               <p className="mt-2 text-sm text-gray-500">
-                Professional handyman and property maintenance services
+                Professional field service and property operations
               </p>
 
               <div className="mt-4 text-sm text-gray-600">
@@ -335,7 +335,7 @@ export default function InvoiceDetailPage() {
             Thank you for your business.
           </p>
           <p>
-            For questions about this invoice, please contact HandyFlow Services.
+            For questions about this invoice, please contact Work Flow Pro Services.
           </p>
         </div>
       </div>

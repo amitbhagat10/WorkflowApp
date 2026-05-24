@@ -1,15 +1,19 @@
 @import "tailwindcss";
 
-/* Base */
 :root {
-  --bg: #f6f8fb;
+  --bg: #f5f6f3;
   --card: #ffffff;
-  --text: #172033;
+  --text: #111827;
   --muted: #667085;
   --border: #e5e7eb;
-  --primary: #2563eb;
-  --primary-dark: #1d4ed8;
-  --primary-soft: #eff6ff;
+
+  --primary: #23443a;
+  --primary-dark: #17332b;
+  --primary-soft: #edf5f1;
+
+  --accent: #b89b5e;
+  --accent-soft: #f7f1e3;
+
   --success-soft: #ecfdf3;
   --warning-soft: #fff7ed;
   --danger-soft: #fef2f2;
@@ -20,8 +24,23 @@ body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
-  background: var(--bg);
+  background:
+    radial-gradient(circle at top left, rgba(184, 155, 94, 0.14), transparent 34%),
+    radial-gradient(circle at top right, rgba(35, 68, 58, 0.12), transparent 35%),
+    linear-gradient(180deg, #f7f8f4 0%, #eef1ed 100%);
   color: var(--text);
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.75), transparent 22%),
+    radial-gradient(circle at 80% 10%, rgba(184, 155, 94, 0.12), transparent 25%),
+    radial-gradient(circle at 50% 90%, rgba(35, 68, 58, 0.09), transparent 30%);
+  z-index: -1;
 }
 
 * {
@@ -34,17 +53,17 @@ main {
   overflow-x: hidden;
 }
 
-/* Page rhythm */
+/* Page headings */
 .page-title {
   font-size: 1.875rem;
   line-height: 2.25rem;
-  font-weight: 800;
-  letter-spacing: -0.03em;
+  font-weight: 850;
+  letter-spacing: -0.04em;
   color: #101828;
 }
 
 .page-subtitle {
-  margin-top: 0.25rem;
+  margin-top: 0.3rem;
   color: var(--muted);
   font-size: 0.95rem;
 }
@@ -54,27 +73,29 @@ main {
   width: 100%;
   max-width: 100%;
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.96);
+  border-radius: 1.35rem;
+  background: rgba(255, 255, 255, 0.88);
   padding: 1.25rem;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.055);
+  backdrop-filter: blur(16px);
   overflow-wrap: break-word;
 }
 
 .card-soft {
-  border-radius: 1.25rem;
-  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border-radius: 1.35rem;
+  background: linear-gradient(135deg, rgba(255,255,255,0.92), rgba(248,250,252,0.82));
   border: 1px solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 18px 45px rgba(15, 23, 42, 0.055);
+  backdrop-filter: blur(16px);
 }
 
 /* Forms */
 .label {
   display: block;
   margin-bottom: 0.4rem;
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #344054;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #475467;
 }
 
 .input,
@@ -83,20 +104,21 @@ textarea {
   width: 100%;
   max-width: 100%;
   border: 1px solid #d0d5dd;
-  border-radius: 0.9rem;
-  background: #ffffff;
+  border-radius: 0.95rem;
+  background: rgba(255, 255, 255, 0.95);
   padding: 0.75rem 0.9rem;
   font-size: 0.92rem;
   color: #101828;
   outline: none;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 
 .input:focus,
 select:focus,
 textarea:focus {
   border-color: var(--primary);
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+  box-shadow: 0 0 0 4px rgba(35, 68, 58, 0.12);
+  background: #ffffff;
 }
 
 /* Buttons */
@@ -107,10 +129,10 @@ textarea:focus {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  border-radius: 0.9rem;
+  border-radius: 0.95rem;
   padding: 0.72rem 1rem;
   font-size: 0.9rem;
-  font-weight: 750;
+  font-weight: 800;
   line-height: 1.2rem;
   transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
   cursor: pointer;
@@ -118,24 +140,24 @@ textarea:focus {
 
 .btn-primary {
   border: 1px solid var(--primary);
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  background: linear-gradient(135deg, #23443a 0%, #17332b 100%);
   color: #ffffff;
-  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
+  box-shadow: 0 14px 26px rgba(35, 68, 58, 0.18);
 }
 
 .btn-primary:hover {
-  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  background: linear-gradient(135deg, #17332b 0%, #10251f 100%);
   transform: translateY(-1px);
 }
 
 .btn-secondary {
-  border: 1px solid #d0d5dd;
-  background: #ffffff;
+  border: 1px solid #d6d9d5;
+  background: rgba(255, 255, 255, 0.9);
   color: #344054;
 }
 
 .btn-secondary:hover {
-  background: #f8fafc;
+  background: #ffffff;
   transform: translateY(-1px);
 }
 
@@ -149,21 +171,21 @@ textarea:focus {
   background: #ffe4e6;
 }
 
-/* Status pills */
+/* Status badges */
 .badge {
   display: inline-flex;
   align-items: center;
   border-radius: 999px;
   padding: 0.25rem 0.65rem;
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: 0.7rem;
+  font-weight: 850;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.03em;
 }
 
 .badge-blue {
   background: var(--primary-soft);
-  color: #1d4ed8;
+  color: var(--primary-dark);
 }
 
 .badge-green {
@@ -181,7 +203,7 @@ textarea:focus {
   color: #be123c;
 }
 
-/* Tables and media */
+/* Media and tables */
 img,
 video,
 canvas,
@@ -195,11 +217,11 @@ table {
   max-width: 100%;
 }
 
-/* Mobile safety */
+/* Mobile */
 @media (max-width: 767px) {
   .card {
     padding: 1rem;
-    border-radius: 1rem;
+    border-radius: 1.1rem;
   }
 
   .btn-primary,
@@ -210,13 +232,13 @@ table {
   }
 
   h1 {
-    font-size: 1.75rem;
-    line-height: 2.1rem;
+    font-size: 1.7rem;
+    line-height: 2.05rem;
   }
 
   h2 {
-    font-size: 1.25rem;
-    line-height: 1.75rem;
+    font-size: 1.22rem;
+    line-height: 1.7rem;
   }
 
   p,
