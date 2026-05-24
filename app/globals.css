@@ -1,111 +1,27 @@
 @import "tailwindcss";
 
-body {
-  background: #f5f7fb;
-  color: #111827;
+/* Base */
+:root {
+  --bg: #f6f8fb;
+  --card: #ffffff;
+  --text: #172033;
+  --muted: #667085;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-dark: #1d4ed8;
+  --primary-soft: #eff6ff;
+  --success-soft: #ecfdf3;
+  --warning-soft: #fff7ed;
+  --danger-soft: #fef2f2;
 }
 
-.input {
-  width: 100%;
-  border-radius: 0.75rem;
-  border: 1px solid #d1d5db;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  outline: none;
-  background: white;
-}
-
-.input:focus {
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 2px #dbeafe;
-}
-
-.btn-primary {
-  border-radius: 0.75rem;
-  background: #2563eb;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: white;
-  border: none;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  background: #1d4ed8;
-}
-
-.btn-primary:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  border-radius: 0.75rem;
-  border: 1px solid #d1d5db;
-  background: white;
-  padding: 0.75rem 1rem;
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: #374151;
-  cursor: pointer;
-}
-
-.btn-secondary:hover {
-  background: #f9fafb;
-}
-
-.card {
-  border-radius: 1rem;
-  background: white;
-  padding: 1.25rem;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-  border: 1px solid #f3f4f6;
-}
-
-.label {
-  margin-bottom: 0.25rem;
-  display: block;
-  font-size: 0.75rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #6b7280;
-}
-.no-print {
-  display: initial;
-}
-
-@media print {
-  .no-print {
-    display: none !important;
-  }
-
-  body {
-    background: white !important;
-  }
-
-  main {
-    padding: 0 !important;
-  }
-
-  .invoice-card {
-    border: none !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-  }
-
-  .invoice-page {
-    background: white !important;
-  }
-}
-/* Mobile layout safety */
 html,
 body {
   width: 100%;
   max-width: 100%;
   overflow-x: hidden;
+  background: var(--bg);
+  color: var(--text);
 }
 
 * {
@@ -118,18 +34,154 @@ main {
   overflow-x: hidden;
 }
 
+/* Page rhythm */
+.page-title {
+  font-size: 1.875rem;
+  line-height: 2.25rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #101828;
+}
+
+.page-subtitle {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* Cards */
 .card {
+  width: 100%;
   max-width: 100%;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 1.25rem;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 1.25rem;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
   overflow-wrap: break-word;
+}
+
+.card-soft {
+  border-radius: 1.25rem;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
+}
+
+/* Forms */
+.label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #344054;
 }
 
 .input,
 select,
-textarea,
-button {
+textarea {
+  width: 100%;
   max-width: 100%;
+  border: 1px solid #d0d5dd;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.92rem;
+  color: #101828;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+.input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+}
+
+/* Buttons */
+.btn-primary,
+.btn-secondary,
+.btn-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border-radius: 0.9rem;
+  padding: 0.72rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.2rem;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  cursor: pointer;
+}
+
+.btn-primary {
+  border: 1px solid var(--primary);
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.18);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  border: 1px solid #d0d5dd;
+  background: #ffffff;
+  color: #344054;
+}
+
+.btn-secondary:hover {
+  background: #f8fafc;
+  transform: translateY(-1px);
+}
+
+.btn-danger {
+  border: 1px solid #fecaca;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.btn-danger:hover {
+  background: #ffe4e6;
+}
+
+/* Status pills */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge-blue {
+  background: var(--primary-soft);
+  color: #1d4ed8;
+}
+
+.badge-green {
+  background: var(--success-soft);
+  color: #047857;
+}
+
+.badge-orange {
+  background: var(--warning-soft);
+  color: #c2410c;
+}
+
+.badge-red {
+  background: var(--danger-soft);
+  color: #be123c;
+}
+
+/* Tables and media */
 img,
 video,
 canvas,
@@ -143,17 +195,18 @@ table {
   max-width: 100%;
 }
 
-/* Better mobile button behaviour */
+/* Mobile safety */
 @media (max-width: 767px) {
-  .btn-primary,
-  .btn-secondary {
-    width: 100%;
-    justify-content: center;
-    text-align: center;
-  }
-
   .card {
     padding: 1rem;
+    border-radius: 1rem;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger {
+    width: 100%;
+    text-align: center;
   }
 
   h1 {
@@ -175,19 +228,31 @@ table {
   textarea {
     word-break: break-word;
   }
-}
 
-/* Tables should scroll inside themselves, not push the whole page sideways */
-@media (max-width: 767px) {
   table {
     display: block;
     overflow-x: auto;
     white-space: nowrap;
   }
+}
 
-  thead,
-  tbody,
-  tr {
-    width: 100%;
+/* Print */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  .card,
+  .invoice-card {
+    box-shadow: none !important;
+    border: none !important;
   }
 }

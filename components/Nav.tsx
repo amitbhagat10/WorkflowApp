@@ -8,6 +8,7 @@ import {
   CreditCard,
   FileText,
   Home,
+  LogOut,
   Users,
   Wrench,
 } from "lucide-react";
@@ -50,13 +51,21 @@ export default function Nav() {
   }
 
   return (
-    <aside className="no-print hidden min-h-screen w-64 border-r border-gray-200 bg-white p-5 md:block">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-blue-700">HandyFlow</h1>
-        <p className="text-sm text-gray-500">Handyman Manager</p>
+    <aside className="no-print hidden min-h-screen w-72 shrink-0 border-r border-slate-200 bg-white/95 p-5 shadow-sm md:block">
+      <div className="mb-8 rounded-3xl bg-gradient-to-br from-blue-600 to-blue-800 p-5 text-white shadow-lg shadow-blue-900/10">
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/15 text-xl font-black">
+          HF
+        </div>
+
+        <h1 className="text-2xl font-black tracking-tight">HandyFlow</h1>
+        <p className="mt-1 text-sm text-blue-100">Smart handyman manager</p>
+
+        <div className="mt-4 rounded-2xl bg-white/12 px-3 py-2 text-xs font-semibold text-blue-50">
+          Live business workspace
+        </div>
       </div>
 
-      <nav className="space-y-2">
+      <nav className="space-y-1.5">
         {links.map((link) => {
           const Icon = link.icon;
           const active =
@@ -67,23 +76,42 @@ export default function Nav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium ${
+              className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-bold transition ${
                 active
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-50"
+                  ? "bg-blue-50 text-blue-700 shadow-sm"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
               }`}
             >
-              <Icon size={18} />
+              <span
+                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                  active
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-500 group-hover:bg-white"
+                }`}
+              >
+                <Icon size={18} />
+              </span>
+
               {link.label}
             </Link>
           );
         })}
       </nav>
 
+      <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+          Quick Tip
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Use Calendar on mobile to manage today’s jobs on-site.
+        </p>
+      </div>
+
       <button
         onClick={signOut}
-        className="mt-8 w-full rounded-xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+        className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
       >
+        <LogOut size={17} />
         Sign out
       </button>
     </aside>

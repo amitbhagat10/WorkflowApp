@@ -16,11 +16,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <div className="flex min-h-screen w-full overflow-x-hidden">
+        <div className="flex min-h-screen w-full overflow-x-hidden bg-slate-50">
           <Nav />
 
           <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-28 md:p-8">
-            {children}
+            <div className="mx-auto w-full max-w-7xl">{children}</div>
           </main>
 
           <MobileBottomNav />

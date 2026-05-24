@@ -21,9 +21,16 @@ const links = [
 export default function MobileBottomNav() {
   const pathname = usePathname();
 
+  const hideNav =
+    pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
+
+  if (hideNav) {
+    return null;
+  }
+
   return (
-    <nav className="no-print fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 shadow-lg backdrop-blur md:hidden">
-      <div className="grid grid-cols-5 pb-safe">
+    <nav className="no-print fixed bottom-3 left-3 right-3 z-50 rounded-3xl border border-slate-200 bg-white/95 shadow-2xl shadow-slate-900/10 backdrop-blur md:hidden">
+      <div className="grid grid-cols-5 px-1 py-1.5">
         {links.map((link) => {
           const Icon = link.icon;
 
@@ -35,18 +42,13 @@ export default function MobileBottomNav() {
             <Link
               key={link.href}
               href={link.href}
-              className={`flex min-w-0 flex-col items-center justify-center gap-1 px-1 py-2 text-[11px] font-semibold ${
-                active ? "text-blue-700" : "text-gray-500"
+              className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 py-2 text-[11px] font-black transition ${
+                active
+                  ? "bg-blue-600 text-white"
+                  : "text-slate-500 hover:bg-slate-50"
               }`}
             >
-              <div
-                className={`rounded-full px-3 py-1 ${
-                  active ? "bg-blue-50" : ""
-                }`}
-              >
-                <Icon size={19} />
-              </div>
-
+              <Icon size={19} />
               <span className="max-w-full truncate">{link.label}</span>
             </Link>
           );
