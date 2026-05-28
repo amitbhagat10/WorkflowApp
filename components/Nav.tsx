@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Bell,
@@ -9,12 +10,13 @@ import {
   FileText,
   Home,
   LogOut,
+  ShieldCheck,
   Users,
   Wrench,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
-const links = [
+const baseLinks = [
   { href: "/", label: "Overview", icon: Home },
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/jobs", label: "Work Orders", icon: Wrench },
@@ -27,9 +29,19 @@ const links = [
 export default function Nav() {
   const pathname = usePathname();
   const router = useRouter();
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const hideNav =
     pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
+
+  useEffect(() => {
+    checkAdmin();
+  }, []);
+
+  async function checkAdmin() {
+    const { data } = await supabase.rpc("current_user_is_admin");
+    setIsAdmin(Boolean(data));
+  }
 
   if (hideNav) {
     return null;
@@ -49,6 +61,10 @@ export default function Nav() {
     router.replace("/login");
     router.refresh();
   }
+
+  const links = isAdmin
+    ? [...baseLinks, { href: "/admin/users", label: "Admin", icon: ShieldCheck }]
+    : baseLinks;
 
   return (
     <aside className="no-print hidden min-h-screen w-72 shrink-0 border-r border-stone-200 bg-[#f8f6f1]/95 p-5 shadow-sm backdrop-blur-xl md:block">

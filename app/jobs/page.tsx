@@ -2,53 +2,80 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  MapPin,
+  MessageSquare,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  Wrench,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import type { Client, Job } from "@/types/app";
+
+type ClientOption = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
+type WorkOrder = {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string | null;
+  job_type: string | null;
+  status: string;
+  payment_status: string;
+  labour_cost: number | null;
+  material_cost: number | null;
+  total_amount: number | null;
+  amount_paid: number | null;
+  amount_outstanding: number | null;
+  appointment_start: string | null;
+  notes: string | null;
+  created_at: string;
+  clients?: ClientOption | null;
+};
 
 export default function JobsPage() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobs, setJobs] = useState<WorkOrder[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [message, setMessage] = useState("");
-
+  const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [paymentFilter, setPaymentFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
-  const [jobTypeFilter, setJobTypeFilter] = useState("all");
-  const [outstandingOnly, setOutstandingOnly] = useState(false);
 
   const [form, setForm] = useState({
     client_id: "",
     title: "",
     description: "",
     job_type: "",
-    appointment_start: "",
-    appointment_end: "",
     status: "booked",
     labour_cost: "",
     material_cost: "",
-    due_date: "",
+    appointment_start: "",
     notes: "",
   });
 
   useEffect(() => {
-    loadData();
+    loadPageData();
   }, []);
 
-  async function loadData() {
+  async function loadPageData() {
     setMessage("");
 
     const clientsResult = await supabase
       .from("clients")
-      .select("*")
-      .order("name");
+      .select("id, name, phone, email, address")
+      .order("name", { ascending: true });
 
     if (clientsResult.error) {
       setMessage(clientsResult.error.message);
-    }
-
-    if (clientsResult.data) {
-      setClients(clientsResult.data as Client[]);
+      return;
     }
 
     const jobsResult = await supabase
@@ -57,6 +84,7 @@ export default function JobsPage() {
         `
         *,
         clients (
+          id,
           name,
           phone,
           email,
@@ -64,18 +92,19 @@ export default function JobsPage() {
         )
       `
       )
-      .order("appointment_start", { ascending: false });
+      .order("created_at", { ascending: false });
 
     if (jobsResult.error) {
       setMessage(jobsResult.error.message);
+      return;
     }
 
-    if (jobsResult.data) {
-      setJobs(jobsResult.data as Job[]);
-    }
+    setClients((clientsResult.data || []) as ClientOption[]);
+    setJobs((jobsResult.data || []) as WorkOrder[]);
   }
 
-  async function addJob() {
+  async function createJob(e: React.FormEvent) {
+    e.preventDefault();
     setMessage("");
 
     if (!form.client_id) {
@@ -84,22 +113,20 @@ export default function JobsPage() {
     }
 
     if (!form.title.trim()) {
-      setMessage("Job title is required.");
+      setMessage("Work order title is required.");
       return;
     }
 
     const { error } = await supabase.from("jobs").insert({
       client_id: form.client_id,
-      title: form.title,
-      description: form.description || null,
-      job_type: form.job_type || null,
-      appointment_start: form.appointment_start || null,
-      appointment_end: form.appointment_end || null,
+      title: form.title.trim(),
+      description: form.description.trim() || null,
+      job_type: form.job_type.trim() || null,
       status: form.status,
       labour_cost: Number(form.labour_cost || 0),
       material_cost: Number(form.material_cost || 0),
-      due_date: form.due_date || null,
-      notes: form.notes || null,
+      appointment_start: form.appointment_start || null,
+      notes: form.notes.trim() || null,
     });
 
     if (error) {
@@ -112,20 +139,21 @@ export default function JobsPage() {
       title: "",
       description: "",
       job_type: "",
-      appointment_start: "",
-      appointment_end: "",
       status: "booked",
       labour_cost: "",
       material_cost: "",
-      due_date: "",
+      appointment_start: "",
       notes: "",
     });
 
-    setMessage("Job saved successfully.");
-    loadData();
+    setShowForm(false);
+    setMessage("Work order created successfully.");
+    loadPageData();
   }
 
-  async function updateJobStatus(jobId: string, status: string) {
+  async function updateStatus(jobId: string, status: string) {
+    setMessage("");
+
     const { error } = await supabase
       .from("jobs")
       .update({ status })
@@ -136,36 +164,14 @@ export default function JobsPage() {
       return;
     }
 
-    loadData();
+    setMessage("Work order status updated.");
+    loadPageData();
   }
-
-  function clearFilters() {
-    setSearchTerm("");
-    setStatusFilter("all");
-    setPaymentFilter("all");
-    setDateFilter("all");
-    setJobTypeFilter("all");
-    setOutstandingOnly(false);
-  }
-
-  const jobTypes = useMemo(() => {
-    const types = jobs
-      .map((job) => job.job_type)
-      .filter((value): value is string => Boolean(value));
-
-    return Array.from(new Set(types)).sort();
-  }, [jobs]);
 
   const filteredJobs = useMemo(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const search = searchTerm.trim().toLowerCase();
 
     return jobs.filter((job) => {
-      const search = searchTerm.trim().toLowerCase();
-
       const matchesSearch =
         !search ||
         job.title.toLowerCase().includes(search) ||
@@ -178,96 +184,88 @@ export default function JobsPage() {
       const matchesStatus =
         statusFilter === "all" || job.status === statusFilter;
 
-      const matchesPayment =
-        paymentFilter === "all" || job.payment_status === paymentFilter;
-
-      const matchesJobType =
-        jobTypeFilter === "all" || job.job_type === jobTypeFilter;
-
-      const matchesOutstanding =
-        !outstandingOnly || Number(job.amount_outstanding || 0) > 0;
-
-      let matchesDate = true;
-
-      if (dateFilter !== "all") {
-        if (!job.appointment_start) {
-          matchesDate = dateFilter === "no_appointment";
-        } else {
-          const appointmentDate = new Date(job.appointment_start);
-
-          if (dateFilter === "today") {
-            matchesDate = appointmentDate >= today && appointmentDate < tomorrow;
-          }
-
-          if (dateFilter === "upcoming") {
-            matchesDate = appointmentDate >= today;
-          }
-
-          if (dateFilter === "past") {
-            matchesDate = appointmentDate < today;
-          }
-
-          if (dateFilter === "no_appointment") {
-            matchesDate = false;
-          }
-        }
-      }
-
-      return (
-        matchesSearch &&
-        matchesStatus &&
-        matchesPayment &&
-        matchesJobType &&
-        matchesOutstanding &&
-        matchesDate
-      );
+      return matchesSearch && matchesStatus;
     });
-  }, [
-    jobs,
-    searchTerm,
-    statusFilter,
-    paymentFilter,
-    dateFilter,
-    jobTypeFilter,
-    outstandingOnly,
-  ]);
+  }, [jobs, searchTerm, statusFilter]);
 
-  const filterSummary = useMemo(() => {
+  const stats = useMemo(() => {
     return {
-      totalJobs: jobs.length,
-      filteredJobs: filteredJobs.length,
-      outstandingAmount: filteredJobs.reduce(
+      total: jobs.length,
+      active: jobs.filter(
+        (job) => job.status !== "completed" && job.status !== "cancelled"
+      ).length,
+      completed: jobs.filter((job) => job.status === "completed").length,
+      outstanding: jobs.reduce(
         (sum, job) => sum + Number(job.amount_outstanding || 0),
         0
       ),
-      totalAmount: filteredJobs.reduce(
-        (sum, job) => sum + Number(job.total_amount || 0),
-        0
-      ),
     };
-  }, [jobs, filteredJobs]);
+  }, [jobs]);
+
+  function mapUrl(address: string) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      address
+    )}`;
+  }
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Jobs</h1>
-        <p className="text-gray-500">
-          Create jobs, schedule appointments, search work history, and track
-          payment status.
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
+            Work Management
+          </p>
+          <h1 className="page-title">Work Orders</h1>
+          <p className="page-subtitle">
+            Create, schedule, and monitor field work without clutter.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={loadPageData} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowForm((current) => !current)}
+            className="btn-primary"
+          >
+            <Plus size={16} />
+            {showForm ? "Close Form" : "New Work Order"}
+          </button>
+        </div>
       </div>
 
       {message && (
-        <div className="mb-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-700">
+        <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 text-sm font-semibold text-stone-700">
           {message}
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="card xl:col-span-1">
-          <h2 className="mb-4 text-xl font-bold">Add Job</h2>
+      <section className="grid gap-4 md:grid-cols-4">
+        <MiniStat title="Total Work Orders" value={stats.total} />
+        <MiniStat title="Active Work" value={stats.active} />
+        <MiniStat title="Completed" value={stats.completed} />
+        <MiniStat
+          title="Outstanding"
+          value={`$${stats.outstanding.toFixed(2)}`}
+          danger
+        />
+      </section>
 
-          <div className="space-y-4">
+      {showForm && (
+        <section className="card">
+          <div className="mb-5">
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              New Work Order
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Add the work details, client, schedule, and estimated costs.
+            </p>
+          </div>
+
+          <form onSubmit={createJob} className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">Client</label>
               <select
@@ -278,7 +276,6 @@ export default function JobsPage() {
                 }
               >
                 <option value="">Select client</option>
-
                 {clients.map((client) => (
                   <option key={client.id} value={client.id}>
                     {client.name}
@@ -288,43 +285,43 @@ export default function JobsPage() {
             </div>
 
             <div>
-              <label className="label">Job Title</label>
+              <label className="label">Status</label>
+              <select
+                className="input"
+                value={form.status}
+                onChange={(e) => setForm({ ...form, status: e.target.value })}
+              >
+                <option value="booked">Booked</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="label">Work Order Title</label>
               <input
                 className="input"
                 value={form.title}
-                onChange={(e) =>
-                  setForm({ ...form, title: e.target.value })
-                }
-                placeholder="Bathroom tap replacement"
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+                placeholder="e.g. Fix leaking tap"
               />
             </div>
 
             <div>
-              <label className="label">Description</label>
-              <textarea
-                className="input"
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                placeholder="Job details"
-              />
-            </div>
-
-            <div>
-              <label className="label">Job Type</label>
+              <label className="label">Work Type</label>
               <input
                 className="input"
                 value={form.job_type}
                 onChange={(e) =>
                   setForm({ ...form, job_type: e.target.value })
                 }
-                placeholder="Plumbing, repair, painting..."
+                placeholder="Plumbing, electrical, repair..."
               />
             </div>
 
             <div>
-              <label className="label">Appointment Start</label>
+              <label className="label">Appointment</label>
               <input
                 className="input"
                 type="datetime-local"
@@ -335,29 +332,19 @@ export default function JobsPage() {
               />
             </div>
 
-            <div>
-              <label className="label">Appointment End</label>
-              <input
-                className="input"
-                type="datetime-local"
-                value={form.appointment_end}
-                onChange={(e) =>
-                  setForm({ ...form, appointment_end: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="label">Labour Cost</label>
                 <input
                   className="input"
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={form.labour_cost}
                   onChange={(e) =>
                     setForm({ ...form, labour_cost: e.target.value })
                   }
-                  placeholder="120"
+                  placeholder="0.00"
                 />
               </div>
 
@@ -366,298 +353,303 @@ export default function JobsPage() {
                 <input
                   className="input"
                   type="number"
+                  min="0"
+                  step="0.01"
                   value={form.material_cost}
                   onChange={(e) =>
                     setForm({ ...form, material_cost: e.target.value })
                   }
-                  placeholder="45"
+                  placeholder="0.00"
                 />
               </div>
             </div>
 
-            <div>
-              <label className="label">Payment Due Date</label>
-              <input
-                className="input"
-                type="date"
-                value={form.due_date}
-                onChange={(e) =>
-                  setForm({ ...form, due_date: e.target.value })
-                }
-              />
-            </div>
-
-            <div>
-              <label className="label">Notes</label>
+            <div className="md:col-span-2">
+              <label className="label">Description</label>
               <textarea
-                className="input"
-                value={form.notes}
+                className="input min-h-24"
+                value={form.description}
                 onChange={(e) =>
-                  setForm({ ...form, notes: e.target.value })
+                  setForm({ ...form, description: e.target.value })
                 }
-                placeholder="Internal notes"
+                placeholder="Describe the work required..."
               />
             </div>
 
-            <button onClick={addJob} className="btn-primary w-full">
-              Save Job
-            </button>
+            <div className="md:col-span-2">
+              <label className="label">Internal Notes</label>
+              <textarea
+                className="input min-h-20"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Optional notes for the business..."
+              />
+            </div>
+
+            <div className="flex gap-3 md:col-span-2">
+              <button type="submit" className="btn-primary">
+                Save Work Order
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="card">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              Work Order Directory
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Search, filter, and open active work quickly.
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-[1fr_180px]">
+            <div className="relative">
+              <Search
+                size={17}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+              />
+              <input
+                className="input pl-10"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search work orders..."
+              />
+            </div>
+
+            <select
+              className="input"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All Status</option>
+              <option value="booked">Booked</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
           </div>
         </div>
 
-        <div className="space-y-6 xl:col-span-2">
-          <div className="card">
-            <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-xl font-bold">Search & Filters</h2>
-                <p className="text-sm text-gray-500">
-                  Quickly find jobs by client, address, job title, status, or
-                  payment condition.
-                </p>
-              </div>
-
-              <button onClick={clearFilters} className="btn-secondary">
-                Clear Filters
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              <div className="md:col-span-2 xl:col-span-3">
-                <label className="label">Search</label>
-                <input
-                  className="input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search title, client, phone, address, job type..."
-                />
-              </div>
-
-              <div>
-                <label className="label">Job Status</label>
-                <select
-                  className="input"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                >
-                  <option value="all">All statuses</option>
-                  <option value="new">New</option>
-                  <option value="booked">Booked</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Payment Status</label>
-                <select
-                  className="input"
-                  value={paymentFilter}
-                  onChange={(e) => setPaymentFilter(e.target.value)}
-                >
-                  <option value="all">All payments</option>
-                  <option value="not_invoiced">Not Invoiced</option>
-                  <option value="invoice_sent">Invoice Sent</option>
-                  <option value="part_paid">Part Paid</option>
-                  <option value="paid">Paid</option>
-                  <option value="overdue">Overdue</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Date</label>
-                <select
-                  className="input"
-                  value={dateFilter}
-                  onChange={(e) => setDateFilter(e.target.value)}
-                >
-                  <option value="all">All dates</option>
-                  <option value="today">Today</option>
-                  <option value="upcoming">Upcoming</option>
-                  <option value="past">Past</option>
-                  <option value="no_appointment">No appointment</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Job Type</label>
-                <select
-                  className="input"
-                  value={jobTypeFilter}
-                  onChange={(e) => setJobTypeFilter(e.target.value)}
-                >
-                  <option value="all">All job types</option>
-                  {jobTypes.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex items-end">
-                <label className="flex items-center gap-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm font-semibold text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={outstandingOnly}
-                    onChange={(e) => setOutstandingOnly(e.target.checked)}
-                  />
-                  Outstanding only
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-5 grid gap-4 md:grid-cols-4">
-              <SummaryBox title="All Jobs" value={filterSummary.totalJobs} />
-              <SummaryBox
-                title="Filtered"
-                value={filterSummary.filteredJobs}
-              />
-              <SummaryBox
-                title="Filtered Total"
-                value={`$${filterSummary.totalAmount.toFixed(2)}`}
-              />
-              <SummaryBox
-                title="Filtered Outstanding"
-                value={`$${filterSummary.outstandingAmount.toFixed(2)}`}
-                danger
-              />
-            </div>
-          </div>
-
-          <div className="card">
-            <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-xl font-bold">Job List</h2>
-                <p className="text-sm text-gray-500">
-                  Showing {filteredJobs.length} of {jobs.length} jobs.
-                </p>
-              </div>
-
-              <button onClick={loadData} className="btn-secondary">
-                Refresh
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {filteredJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-                >
-                  <div className="flex flex-col justify-between gap-3 md:flex-row">
-                    <div>
-                      <h3 className="font-semibold">{job.title}</h3>
-
-                      <p className="text-sm text-gray-500">
-                        {job.clients?.name || "No client"} ·{" "}
-                        {job.clients?.phone || "No phone"}
-                      </p>
-
-                      <p className="text-sm text-gray-500">
-                        {job.clients?.address || "No address"}
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-500">
-                        {job.appointment_start
-                          ? new Date(job.appointment_start).toLocaleString()
-                          : "No appointment date"}
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-500">
-                        Type: {job.job_type || "Not specified"}
-                      </p>
+        <div className="mt-6 grid gap-4">
+          {filteredJobs.map((job) => (
+            <div
+              key={job.id}
+              className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm"
+            >
+              <div className="grid gap-4 xl:grid-cols-[1fr_270px]">
+                <div className="min-w-0">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+                      <Wrench size={20} />
                     </div>
 
-                    <div className="text-left md:text-right">
-                      <p className="font-semibold">
-                        Total: ${Number(job.total_amount || 0).toFixed(2)}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-lg font-black text-stone-900">
+                          {job.title}
+                        </h3>
+
+                        <StatusBadge value={job.status} />
+                        <PaymentBadge value={job.payment_status} />
+                      </div>
+
+                      <p className="mt-1 text-sm text-stone-500">
+                        {job.clients?.name || "No client"} ·{" "}
+                        {job.job_type || "General work"}
                       </p>
 
-                      <p className="text-sm text-gray-500">
-                        Paid: ${Number(job.amount_paid || 0).toFixed(2)}
+                      <p className="mt-1 text-sm text-stone-500">
+                        {job.clients?.address || "No address added"}
                       </p>
 
-                      <p className="text-sm font-semibold text-red-600">
-                        Outstanding: $
-                        {Number(job.amount_outstanding || 0).toFixed(2)}
-                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-stone-500">
+                        <span className="rounded-full bg-stone-100 px-3 py-1">
+                          Created {new Date(job.created_at).toLocaleDateString()}
+                        </span>
+
+                        <span className="rounded-full bg-[#f4efe4] px-3 py-1 text-[#2b2926]">
+                          {job.appointment_start
+                            ? new Date(job.appointment_start).toLocaleString()
+                            : "No appointment"}
+                        </span>
+                      </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="rounded-2xl bg-stone-50/80 p-4">
+                  <div className="grid grid-cols-3 gap-3 text-center">
+                    <AmountBlock
+                      label="Total"
+                      value={Number(job.total_amount || 0)}
+                    />
+                    <AmountBlock
+                      label="Paid"
+                      value={Number(job.amount_paid || 0)}
+                    />
+                    <AmountBlock
+                      label="Due"
+                      value={Number(job.amount_outstanding || 0)}
+                      danger
+                    />
+                  </div>
+
+                  <div className="mt-4 grid gap-2">
                     <select
-                      className="input max-w-xs"
+                      className="input"
                       value={job.status}
-                      onChange={(e) =>
-                        updateJobStatus(job.id, e.target.value)
-                      }
+                      onChange={(e) => updateStatus(job.id, e.target.value)}
                     >
-                      <option value="new">New</option>
                       <option value="booked">Booked</option>
                       <option value="in_progress">In Progress</option>
                       <option value="completed">Completed</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
 
-                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold uppercase text-blue-700">
-                      {job.payment_status.replace("_", " ")}
-                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {job.clients?.phone && (
+                        <a href={`tel:${job.clients.phone}`} className="btn-secondary">
+                          <Phone size={15} />
+                          Call
+                        </a>
+                      )}
 
-                    <Link href={`/jobs/${job.id}`} className="btn-primary">
-                      View Details
-                    </Link>
+                      {job.clients?.phone && (
+                        <a href={`sms:${job.clients.phone}`} className="btn-secondary">
+                          <MessageSquare size={15} />
+                          SMS
+                        </a>
+                      )}
 
-                    <Link href={`/invoices/${job.id}`} className="btn-secondary">
-                      Invoice
-                    </Link>
+                      {job.clients?.address && (
+                        <a
+                          href={mapUrl(job.clients.address)}
+                          target="_blank"
+                          className="btn-secondary"
+                        >
+                          <MapPin size={15} />
+                          Map
+                        </a>
+                      )}
+
+                      <Link href={`/jobs/${job.id}`} className="btn-primary">
+                        Open
+                      </Link>
+                    </div>
                   </div>
                 </div>
-              ))}
-
-              {filteredJobs.length === 0 && (
-                <div className="rounded-xl bg-gray-50 p-6 text-center">
-                  <p className="text-sm text-gray-500">
-                    No jobs match the selected filters.
-                  </p>
-
-                  <button
-                    onClick={clearFilters}
-                    className="btn-secondary mt-4"
-                  >
-                    Clear Filters
-                  </button>
-                </div>
-              )}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-      </div>
+
+        {filteredJobs.length === 0 && (
+          <div className="mt-6 rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center">
+            <p className="text-sm font-semibold text-stone-500">
+              No work orders found.
+            </p>
+
+            <button
+              onClick={() => setShowForm(true)}
+              className="btn-primary mt-4"
+            >
+              Create Work Order
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function SummaryBox({
+function MiniStat({
   title,
   value,
-  danger = false,
+  danger,
 }: {
   title: string;
   value: string | number;
   danger?: boolean;
 }) {
   return (
-    <div className="rounded-xl bg-gray-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {title}
-      </p>
+    <div className="card">
+      <p className="text-sm font-bold text-stone-500">{title}</p>
       <p
-        className={`mt-2 text-xl font-bold ${
-          danger ? "text-red-700" : "text-gray-900"
+        className={`mt-3 text-3xl font-black tracking-tight ${
+          danger ? "text-red-700" : "text-stone-950"
         }`}
       >
         {value}
       </p>
     </div>
+  );
+}
+
+function AmountBlock({
+  label,
+  value,
+  danger,
+}: {
+  label: string;
+  value: number;
+  danger?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-stone-500">{label}</p>
+      <p
+        className={`mt-1 text-sm font-black ${
+          danger ? "text-red-700" : "text-stone-900"
+        }`}
+      >
+        ${value.toFixed(2)}
+      </p>
+    </div>
+  );
+}
+
+function StatusBadge({ value }: { value: string }) {
+  const style =
+    value === "completed"
+      ? "bg-emerald-50 text-emerald-700"
+      : value === "cancelled"
+      ? "bg-red-50 text-red-700"
+      : "bg-[#f4efe4] text-[#2b2926]";
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
+    >
+      {value.replace("_", " ")}
+    </span>
+  );
+}
+
+function PaymentBadge({ value }: { value: string }) {
+  const style =
+    value === "paid"
+      ? "bg-emerald-50 text-emerald-700"
+      : value === "overdue"
+      ? "bg-red-50 text-red-700"
+      : "bg-stone-100 text-stone-600";
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
+    >
+      {value.replace("_", " ")}
+    </span>
   );
 }

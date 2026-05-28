@@ -2,33 +2,46 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Mail,
+  MessageSquare,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  User,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import type { Client } from "@/types/app";
+
+type Client = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+  preferred_contact_method?: string | null;
+  created_at: string;
+};
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
+  const [message, setMessage] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [showForm, setShowForm] = useState(false);
+
   const [form, setForm] = useState({
     name: "",
     phone: "",
     email: "",
     address: "",
-    notes: "",
+    preferred_contact_method: "phone",
   });
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const [contactFilter, setContactFilter] = useState("all");
-  const [addressFilter, setAddressFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("newest");
-
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
 
   useEffect(() => {
     loadClients();
   }, []);
 
   async function loadClients() {
-    setLoading(true);
     setMessage("");
 
     const { data, error } = await supabase
@@ -38,16 +51,14 @@ export default function ClientsPage() {
 
     if (error) {
       setMessage(error.message);
+      return;
     }
 
-    if (data) {
-      setClients(data as Client[]);
-    }
-
-    setLoading(false);
+    setClients((data || []) as Client[]);
   }
 
-  async function addClient() {
+  async function createClient(e: React.FormEvent) {
+    e.preventDefault();
     setMessage("");
 
     if (!form.name.trim()) {
@@ -56,12 +67,11 @@ export default function ClientsPage() {
     }
 
     const { error } = await supabase.from("clients").insert({
-      name: form.name,
-      phone: form.phone || null,
-      email: form.email || null,
-      address: form.address || null,
-      address_source: "manual",
-      notes: form.notes || null,
+      name: form.name.trim(),
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      address: form.address.trim() || null,
+      preferred_contact_method: form.preferred_contact_method,
     });
 
     if (error) {
@@ -74,134 +84,90 @@ export default function ClientsPage() {
       phone: "",
       email: "",
       address: "",
-      notes: "",
+      preferred_contact_method: "phone",
     });
 
-    setMessage("Client saved successfully.");
+    setShowForm(false);
+    setMessage("Client created successfully.");
     loadClients();
-  }
-
-  function clearFilters() {
-    setSearchTerm("");
-    setContactFilter("all");
-    setAddressFilter("all");
-    setSortBy("newest");
-  }
-
-  function mapUrl(address: string) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      address
-    )}`;
   }
 
   const filteredClients = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
-    let result = clients.filter((client) => {
-      const matchesSearch =
-        !search ||
+    if (!search) return clients;
+
+    return clients.filter((client) => {
+      return (
         client.name.toLowerCase().includes(search) ||
         (client.phone || "").toLowerCase().includes(search) ||
         (client.email || "").toLowerCase().includes(search) ||
-        (client.address || "").toLowerCase().includes(search) ||
-        (client.notes || "").toLowerCase().includes(search);
-
-      let matchesContact = true;
-
-      if (contactFilter === "has_phone") {
-        matchesContact = Boolean(client.phone);
-      }
-
-      if (contactFilter === "no_phone") {
-        matchesContact = !client.phone;
-      }
-
-      if (contactFilter === "has_email") {
-        matchesContact = Boolean(client.email);
-      }
-
-      if (contactFilter === "no_email") {
-        matchesContact = !client.email;
-      }
-
-      let matchesAddress = true;
-
-      if (addressFilter === "has_address") {
-        matchesAddress = Boolean(client.address);
-      }
-
-      if (addressFilter === "no_address") {
-        matchesAddress = !client.address;
-      }
-
-      return matchesSearch && matchesContact && matchesAddress;
-    });
-
-    result = [...result].sort((a, b) => {
-      if (sortBy === "name") {
-        return a.name.localeCompare(b.name);
-      }
-
-      if (sortBy === "oldest") {
-        return (
-          new Date(a.created_at).getTime() -
-          new Date(b.created_at).getTime()
-        );
-      }
-
-      return (
-        new Date(b.created_at).getTime() -
-        new Date(a.created_at).getTime()
+        (client.address || "").toLowerCase().includes(search)
       );
     });
+  }, [clients, searchTerm]);
 
-    return result;
-  }, [clients, searchTerm, contactFilter, addressFilter, sortBy]);
-
-  const summary = useMemo(() => {
+  const stats = useMemo(() => {
     return {
-      totalClients: clients.length,
-      filteredClients: filteredClients.length,
-      withPhone: clients.filter((client) => Boolean(client.phone)).length,
-      withEmail: clients.filter((client) => Boolean(client.email)).length,
-      withAddress: clients.filter((client) => Boolean(client.address)).length,
+      total: clients.length,
+      withPhone: clients.filter((client) => client.phone).length,
+      withEmail: clients.filter((client) => client.email).length,
     };
-  }, [clients, filteredClients]);
+  }, [clients]);
 
   return (
-    <div>
-      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+    <div className="space-y-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-3xl font-bold">Clients</h1>
-          <p className="text-gray-500">
-            Add clients, search records, and open full job/payment history.
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
+            Client Management
+          </p>
+          <h1 className="page-title">Clients</h1>
+          <p className="page-subtitle">
+            Manage customer records, contact details, and service history from one clean view.
           </p>
         </div>
 
-        <button onClick={loadClients} className="btn-secondary">
-          Refresh
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={loadClients} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowForm((current) => !current)}
+            className="btn-primary"
+          >
+            <Plus size={16} />
+            {showForm ? "Close Form" : "Add Client"}
+          </button>
+        </div>
       </div>
 
       {message && (
-        <div className="mb-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-700">
+        <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 text-sm font-semibold text-stone-700">
           {message}
         </div>
       )}
 
-      <div className="mb-6 grid gap-5 md:grid-cols-5">
-        <MetricCard title="Total Clients" value={summary.totalClients} />
-        <MetricCard title="Filtered" value={summary.filteredClients} />
-        <MetricCard title="With Phone" value={summary.withPhone} />
-        <MetricCard title="With Email" value={summary.withEmail} />
-        <MetricCard title="With Address" value={summary.withAddress} />
-      </div>
+      <section className="grid gap-4 md:grid-cols-3">
+        <MiniStat title="Total Clients" value={stats.total} />
+        <MiniStat title="Phone Contacts" value={stats.withPhone} />
+        <MiniStat title="Email Contacts" value={stats.withEmail} />
+      </section>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="card lg:col-span-1">
-          <h2 className="mb-4 text-xl font-bold">Add Client</h2>
+      {showForm && (
+        <section className="card">
+          <div className="mb-5">
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              New Client
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Add the essential details now. More information can be managed later.
+            </p>
+          </div>
 
-          <div className="space-y-4">
+          <form onSubmit={createClient} className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="label">Client Name</label>
               <input
@@ -210,8 +176,27 @@ export default function ClientsPage() {
                 onChange={(e) =>
                   setForm({ ...form, name: e.target.value })
                 }
-                placeholder="John Smith"
+                placeholder="e.g. John Smith"
               />
+            </div>
+
+            <div>
+              <label className="label">Preferred Contact</label>
+              <select
+                className="input"
+                value={form.preferred_contact_method}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    preferred_contact_method: e.target.value,
+                  })
+                }
+              >
+                <option value="phone">Phone</option>
+                <option value="sms">SMS</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+              </select>
             </div>
 
             <div>
@@ -230,15 +215,16 @@ export default function ClientsPage() {
               <label className="label">Email</label>
               <input
                 className="input"
+                type="email"
                 value={form.email}
                 onChange={(e) =>
                   setForm({ ...form, email: e.target.value })
                 }
-                placeholder="client@email.com"
+                placeholder="client@example.com"
               />
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <label className="label">Address</label>
               <input
                 className="input"
@@ -246,209 +232,150 @@ export default function ClientsPage() {
                 onChange={(e) =>
                   setForm({ ...form, address: e.target.value })
                 }
-                placeholder="Client address"
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                Address autocomplete is paused for now. Manual entry still works
-                with the Map button.
-              </p>
-            </div>
-
-            <div>
-              <label className="label">Notes</label>
-              <textarea
-                className="input"
-                value={form.notes}
-                onChange={(e) =>
-                  setForm({ ...form, notes: e.target.value })
-                }
-                placeholder="Any important notes"
+                placeholder="Street address, suburb, state"
               />
             </div>
 
-            <button onClick={addClient} className="btn-primary w-full">
-              Save Client
-            </button>
+            <div className="flex gap-3 md:col-span-2">
+              <button type="submit" className="btn-primary">
+                Save Client
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="card">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              Client Directory
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Search and open client records quickly.
+            </p>
+          </div>
+
+          <div className="relative w-full md:max-w-sm">
+            <Search
+              size={17}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+            />
+            <input
+              className="input pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search clients..."
+            />
           </div>
         </div>
 
-        <div className="space-y-6 lg:col-span-2">
-          <div className="card">
-            <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-xl font-bold">Search & Filters</h2>
-                <p className="text-sm text-gray-500">
-                  Find clients by name, phone, email, address, or notes.
-                </p>
-              </div>
-
-              <button onClick={clearFilters} className="btn-secondary">
-                Clear Filters
-              </button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="md:col-span-2">
-                <label className="label">Search Clients</label>
-                <input
-                  className="input"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search name, phone, email, address..."
-                />
-              </div>
-
-              <div>
-                <label className="label">Contact Filter</label>
-                <select
-                  className="input"
-                  value={contactFilter}
-                  onChange={(e) => setContactFilter(e.target.value)}
-                >
-                  <option value="all">All contacts</option>
-                  <option value="has_phone">Has phone</option>
-                  <option value="no_phone">Missing phone</option>
-                  <option value="has_email">Has email</option>
-                  <option value="no_email">Missing email</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Address Filter</label>
-                <select
-                  className="input"
-                  value={addressFilter}
-                  onChange={(e) => setAddressFilter(e.target.value)}
-                >
-                  <option value="all">All addresses</option>
-                  <option value="has_address">Has address</option>
-                  <option value="no_address">Missing address</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="label">Sort By</label>
-                <select
-                  className="input"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value)}
-                >
-                  <option value="newest">Newest first</option>
-                  <option value="oldest">Oldest first</option>
-                  <option value="name">Name A-Z</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2 className="mb-4 text-xl font-bold">Client List</h2>
-
-            {loading && <p>Loading clients...</p>}
-
-            <div className="space-y-3">
-              {filteredClients.map((client) => (
-                <div
-                  key={client.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-                >
-                  <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-                    <div>
-                      <h3 className="font-semibold">{client.name}</h3>
-
-                      <p className="text-sm text-gray-500">
-                        {client.phone || "No phone"} ·{" "}
-                        {client.email || "No email"}
-                      </p>
-
-                      <p className="mt-1 text-sm text-gray-500">
-                        {client.address || "No address"}
-                      </p>
-
-                      {client.notes && (
-                        <p className="mt-2 text-sm text-gray-600">
-                          {client.notes}
-                        </p>
-                      )}
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          {filteredClients.map((client) => (
+            <div
+              key={client.id}
+              className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm"
+            >
+              <div className="flex flex-col justify-between gap-4 md:flex-row">
+                <div className="min-w-0">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+                      <User size={20} />
                     </div>
 
-                    <div className="flex flex-wrap gap-2 md:justify-end">
-                      {client.phone && (
-                        <a
-                          href={`tel:${client.phone}`}
-                          className="btn-secondary"
-                        >
-                          Call
-                        </a>
-                      )}
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-black text-stone-900">
+                        {client.name}
+                      </h3>
 
-                      {client.phone && (
-                        <a
-                          href={`sms:${client.phone}`}
-                          className="btn-secondary"
-                        >
-                          SMS
-                        </a>
-                      )}
+                      <p className="mt-1 text-sm text-stone-500">
+                        {client.address || "No address added"}
+                      </p>
 
-                      {client.address && (
-                        <a
-                          href={mapUrl(client.address)}
-                          target="_blank"
-                          className="btn-secondary"
-                        >
-                          Map
-                        </a>
-                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {client.preferred_contact_method && (
+                          <span className="rounded-full bg-[#f4efe4] px-3 py-1 text-xs font-black uppercase tracking-wide text-[#2b2926]">
+                            {client.preferred_contact_method}
+                          </span>
+                        )}
 
-                      <Link
-                        href={`/clients/${client.id}`}
-                        className="btn-primary"
-                      >
-                        View Details
-                      </Link>
+                        <span className="rounded-full bg-stone-100 px-3 py-1 text-xs font-bold text-stone-600">
+                          Added{" "}
+                          {new Date(client.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
-              ))}
 
-              {!loading && filteredClients.length === 0 && (
-                <div className="rounded-xl bg-gray-50 p-6 text-center">
-                  <p className="text-sm text-gray-500">
-                    No clients match the selected filters.
-                  </p>
+                <div className="flex shrink-0 flex-wrap gap-2 md:justify-end">
+                  {client.phone && (
+                    <a href={`tel:${client.phone}`} className="btn-secondary">
+                      <Phone size={15} />
+                      Call
+                    </a>
+                  )}
 
-                  <button
-                    onClick={clearFilters}
-                    className="btn-secondary mt-4"
-                  >
-                    Clear Filters
-                  </button>
+                  {client.phone && (
+                    <a href={`sms:${client.phone}`} className="btn-secondary">
+                      <MessageSquare size={15} />
+                      SMS
+                    </a>
+                  )}
+
+                  {client.email && (
+                    <a
+                      href={`mailto:${client.email}`}
+                      className="btn-secondary"
+                    >
+                      <Mail size={15} />
+                      Email
+                    </a>
+                  )}
+
+                  <Link href={`/clients/${client.id}`} className="btn-primary">
+                    Open
+                  </Link>
                 </div>
-              )}
-
-              {!loading && clients.length === 0 && (
-                <p className="text-sm text-gray-500">No clients yet.</p>
-              )}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
-      </div>
+
+        {filteredClients.length === 0 && (
+          <div className="mt-6 rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center">
+            <p className="text-sm font-semibold text-stone-500">
+              No clients found.
+            </p>
+
+            <button
+              onClick={() => setShowForm(true)}
+              className="btn-primary mt-4"
+            >
+              Add First Client
+            </button>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
 
-function MetricCard({
-  title,
-  value,
-}: {
-  title: string;
-  value: string | number;
-}) {
+function MiniStat({ title, value }: { title: string; value: string | number }) {
   return (
     <div className="card">
-      <p className="text-sm text-gray-500">{title}</p>
-      <p className="mt-2 text-3xl font-bold">{value}</p>
+      <p className="text-sm font-bold text-stone-500">{title}</p>
+      <p className="mt-3 text-3xl font-black tracking-tight text-stone-950">
+        {value}
+      </p>
     </div>
   );
 }

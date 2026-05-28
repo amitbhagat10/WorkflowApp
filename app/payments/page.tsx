@@ -1,32 +1,74 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  CreditCard,
+  DollarSign,
+  Plus,
+  Receipt,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import type { Job } from "@/types/app";
+
+type JobOption = {
+  id: string;
+  title: string;
+  total_amount: number | null;
+  amount_paid: number | null;
+  amount_outstanding: number | null;
+  payment_status: string;
+  clients?: {
+    name: string | null;
+    phone: string | null;
+    address: string | null;
+  } | null;
+};
+
+type PaymentRecord = {
+  id: string;
+  job_id: string;
+  amount: number;
+  payment_method: string | null;
+  payment_date: string | null;
+  notes: string | null;
+  created_at: string;
+  jobs?: JobOption | null;
+};
 
 export default function PaymentsPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [message, setMessage] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
 
   const [form, setForm] = useState({
     job_id: "",
     amount: "",
-    payment_method: "bank_transfer",
+    payment_method: "Cash",
+    payment_date: new Date().toISOString().slice(0, 10),
     notes: "",
   });
 
   useEffect(() => {
-    loadJobs();
+    loadPageData();
   }, []);
 
-  async function loadJobs() {
+  async function loadPageData() {
     setMessage("");
 
-    const { data, error } = await supabase
+    const jobsResult = await supabase
       .from("jobs")
       .select(
         `
-        *,
+        id,
+        title,
+        total_amount,
+        amount_paid,
+        amount_outstanding,
+        payment_status,
         clients (
           name,
           phone,
@@ -36,40 +78,54 @@ export default function PaymentsPage() {
       )
       .order("created_at", { ascending: false });
 
-    if (error) {
-      setMessage(error.message);
+    if (jobsResult.error) {
+      setMessage(jobsResult.error.message);
       return;
     }
 
-    if (data) {
-      setJobs(data as Job[]);
+    const paymentsResult = await supabase
+      .from("payments")
+      .select(
+        `
+        id,
+        job_id,
+        amount,
+        payment_method,
+        payment_date,
+        notes,
+        created_at,
+        jobs (
+          id,
+          title,
+          total_amount,
+          amount_paid,
+          amount_outstanding,
+          payment_status,
+          clients (
+            name,
+            phone,
+            address
+          )
+        )
+      `
+      )
+      .order("created_at", { ascending: false });
+
+    if (paymentsResult.error) {
+      setMessage(paymentsResult.error.message);
+      return;
     }
+
+    setJobs((jobsResult.data || []) as JobOption[]);
+    setPayments((paymentsResult.data || []) as PaymentRecord[]);
   }
 
-  const selectedJob = jobs.find((job) => job.id === form.job_id);
-
-  const outstandingJobs = useMemo(() => {
-    return jobs.filter((job) => Number(job.amount_outstanding) > 0);
-  }, [jobs]);
-
-  const totals = useMemo(() => {
-    return {
-      totalOutstanding: jobs.reduce(
-        (sum, job) => sum + Number(job.amount_outstanding || 0),
-        0
-      ),
-      totalPaid: jobs.reduce(
-        (sum, job) => sum + Number(job.amount_paid || 0),
-        0
-      ),
-    };
-  }, [jobs]);
-
-  async function addPayment() {
+  async function createPayment(e: React.FormEvent) {
+    e.preventDefault();
     setMessage("");
 
-    if (!selectedJob) {
-      setMessage("Please select a job.");
+    if (!form.job_id) {
+      setMessage("Please select a work order.");
       return;
     }
 
@@ -79,11 +135,11 @@ export default function PaymentsPage() {
     }
 
     const { error } = await supabase.from("payments").insert({
-      job_id: selectedJob.id,
-      client_id: selectedJob.client_id,
+      job_id: form.job_id,
       amount: Number(form.amount),
       payment_method: form.payment_method,
-      notes: form.notes || null,
+      payment_date: form.payment_date || null,
+      notes: form.notes.trim() || null,
     });
 
     if (error) {
@@ -94,103 +150,165 @@ export default function PaymentsPage() {
     setForm({
       job_id: "",
       amount: "",
-      payment_method: "bank_transfer",
+      payment_method: "Cash",
+      payment_date: new Date().toISOString().slice(0, 10),
       notes: "",
     });
 
-    setMessage("Payment saved successfully.");
-    loadJobs();
+    setShowForm(false);
+    setMessage("Payment recorded successfully.");
+    loadPageData();
   }
 
+  const summary = useMemo(() => {
+    const collected = payments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
+
+    const outstanding = jobs.reduce(
+      (sum, job) => sum + Number(job.amount_outstanding || 0),
+      0
+    );
+
+    const paidJobs = jobs.filter((job) => job.payment_status === "paid").length;
+
+    return {
+      collected,
+      outstanding,
+      paidJobs,
+      paymentCount: payments.length,
+    };
+  }, [payments, jobs]);
+
+  const filteredPayments = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+
+    if (!search) return payments;
+
+    return payments.filter((payment) => {
+      return (
+        (payment.jobs?.title || "").toLowerCase().includes(search) ||
+        (payment.jobs?.clients?.name || "").toLowerCase().includes(search) ||
+        (payment.payment_method || "").toLowerCase().includes(search) ||
+        (payment.notes || "").toLowerCase().includes(search)
+      );
+    });
+  }, [payments, searchTerm]);
+
+  const outstandingJobs = useMemo(() => {
+    return jobs.filter((job) => Number(job.amount_outstanding || 0) > 0);
+  }, [jobs]);
+
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Payments</h1>
-        <p className="text-gray-500">
-          Track money received and outstanding balances.
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
+            Payment Control
+          </p>
+          <h1 className="page-title">Payments</h1>
+          <p className="page-subtitle">
+            Record payments, monitor outstanding balances, and keep work order billing clean.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={loadPageData} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowForm((current) => !current)}
+            className="btn-primary"
+          >
+            <Plus size={16} />
+            {showForm ? "Close Form" : "Record Payment"}
+          </button>
+        </div>
       </div>
 
       {message && (
-        <div className="mb-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-700">
+        <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 text-sm font-semibold text-stone-700">
           {message}
         </div>
       )}
 
-      <div className="mb-6 grid gap-5 md:grid-cols-2">
-        <div className="card">
-          <p className="text-sm text-gray-500">Total Received</p>
-          <p className="mt-2 text-3xl font-bold text-green-700">
-            ${totals.totalPaid.toFixed(2)}
-          </p>
-        </div>
+      <section className="grid gap-4 md:grid-cols-4">
+        <MiniStat
+          title="Collected"
+          value={`$${summary.collected.toFixed(2)}`}
+          icon={<DollarSign size={20} />}
+        />
 
-        <div className="card">
-          <p className="text-sm text-gray-500">Total Outstanding</p>
-          <p className="mt-2 text-3xl font-bold text-red-700">
-            ${totals.totalOutstanding.toFixed(2)}
-          </p>
-        </div>
-      </div>
+        <MiniStat
+          title="Outstanding"
+          value={`$${summary.outstanding.toFixed(2)}`}
+          icon={<Receipt size={20} />}
+          danger
+        />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="card">
-          <h2 className="mb-4 text-xl font-bold">Record Payment</h2>
+        <MiniStat
+          title="Paid Work Orders"
+          value={summary.paidJobs}
+          icon={<CreditCard size={20} />}
+        />
 
-          <div className="space-y-4">
-            <div>
-              <label className="label">Job</label>
+        <MiniStat
+          title="Payment Records"
+          value={summary.paymentCount}
+          icon={<Receipt size={20} />}
+        />
+      </section>
+
+      {showForm && (
+        <section className="card">
+          <div className="mb-5">
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              Record Payment
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Select a work order and enter the amount received.
+            </p>
+          </div>
+
+          <form onSubmit={createPayment} className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <label className="label">Work Order</label>
               <select
                 className="input"
                 value={form.job_id}
-                onChange={(e) =>
-                  setForm({ ...form, job_id: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, job_id: e.target.value })}
               >
-                <option value="">Select outstanding job</option>
+                <option value="">Select work order</option>
 
                 {outstandingJobs.map((job) => (
                   <option key={job.id} value={job.id}>
-                    {job.title} - {job.clients?.name} - $
-                    {Number(job.amount_outstanding).toFixed(2)}
+                    {job.title} — {job.clients?.name || "No client"} — Due $
+                    {Number(job.amount_outstanding || 0).toFixed(2)}
                   </option>
                 ))}
+
+                {outstandingJobs.length === 0 &&
+                  jobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.title} — {job.clients?.name || "No client"}
+                    </option>
+                  ))}
               </select>
             </div>
-
-            {selectedJob && (
-              <div className="rounded-xl bg-gray-50 p-4 text-sm">
-                <p>
-                  <strong>Client:</strong> {selectedJob.clients?.name}
-                </p>
-                <p>
-                  <strong>Job:</strong> {selectedJob.title}
-                </p>
-                <p>
-                  <strong>Total:</strong> $
-                  {Number(selectedJob.total_amount).toFixed(2)}
-                </p>
-                <p>
-                  <strong>Already Paid:</strong> $
-                  {Number(selectedJob.amount_paid).toFixed(2)}
-                </p>
-                <p>
-                  <strong>Outstanding:</strong> $
-                  {Number(selectedJob.amount_outstanding).toFixed(2)}
-                </p>
-              </div>
-            )}
 
             <div>
               <label className="label">Amount Received</label>
               <input
                 className="input"
                 type="number"
+                min="0"
+                step="0.01"
                 value={form.amount}
-                onChange={(e) =>
-                  setForm({ ...form, amount: e.target.value })
-                }
-                placeholder="100"
+                onChange={(e) => setForm({ ...form, amount: e.target.value })}
+                placeholder="0.00"
               />
             </div>
 
@@ -203,88 +321,222 @@ export default function PaymentsPage() {
                   setForm({ ...form, payment_method: e.target.value })
                 }
               >
-                <option value="cash">Cash</option>
-                <option value="bank_transfer">Bank Transfer</option>
-                <option value="card">Card</option>
-                <option value="payid">PayID</option>
-                <option value="other">Other</option>
+                <option value="Cash">Cash</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+                <option value="Card">Card</option>
+                <option value="EFTPOS">EFTPOS</option>
+                <option value="Other">Other</option>
               </select>
             </div>
 
             <div>
-              <label className="label">Notes</label>
-              <textarea
+              <label className="label">Payment Date</label>
+              <input
                 className="input"
-                value={form.notes}
+                type="date"
+                value={form.payment_date}
                 onChange={(e) =>
-                  setForm({ ...form, notes: e.target.value })
+                  setForm({ ...form, payment_date: e.target.value })
                 }
-                placeholder="Payment reference or comments"
               />
             </div>
 
-            <button onClick={addPayment} className="btn-primary w-full">
-              Save Payment
-            </button>
+            <div>
+              <label className="label">Notes</label>
+              <input
+                className="input"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                placeholder="Optional payment note"
+              />
+            </div>
+
+            <div className="flex gap-3 md:col-span-2">
+              <button type="submit" className="btn-primary">
+                Save Payment
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="card">
+        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+          <div>
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              Payment History
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              Recent payment records and related work orders.
+            </p>
+          </div>
+
+          <div className="relative w-full md:max-w-sm">
+            <Search
+              size={17}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+            />
+            <input
+              className="input pl-10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search payments..."
+            />
           </div>
         </div>
 
-        <div className="card lg:col-span-2">
-          <h2 className="mb-4 text-xl font-bold">Outstanding Jobs</h2>
+        <div className="mt-6 grid gap-4">
+          {filteredPayments.map((payment) => (
+            <div
+              key={payment.id}
+              className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm"
+            >
+              <div className="grid gap-4 xl:grid-cols-[1fr_220px]">
+                <div className="min-w-0">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+                      <CreditCard size={20} />
+                    </div>
 
-          <div className="space-y-3">
-            {outstandingJobs.map((job) => (
-              <div
-                key={job.id}
-                className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-              >
-                <div className="flex flex-col justify-between gap-3 md:flex-row">
-                  <div>
-                    <h3 className="font-semibold">{job.title}</h3>
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-black text-stone-900">
+                        ${Number(payment.amount || 0).toFixed(2)}
+                      </h3>
 
-                    <p className="text-sm text-gray-500">
-                      {job.clients?.name} · {job.clients?.phone}
-                    </p>
+                      <p className="mt-1 text-sm text-stone-500">
+                        {payment.jobs?.title || "Unknown work order"} ·{" "}
+                        {payment.jobs?.clients?.name || "No client"}
+                      </p>
 
-                    <p className="text-sm text-gray-500">
-                      Address: {job.clients?.address || "No address"}
-                    </p>
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-stone-500">
+                        <span className="rounded-full bg-[#f4efe4] px-3 py-1 text-[#2b2926]">
+                          {payment.payment_method || "Payment"}
+                        </span>
 
-                    <p className="text-sm text-gray-500">
-                      Due date: {job.due_date || "No due date"}
-                    </p>
+                        <span className="rounded-full bg-stone-100 px-3 py-1">
+                          {payment.payment_date
+                            ? new Date(payment.payment_date).toLocaleDateString()
+                            : new Date(payment.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      {payment.notes && (
+                        <p className="mt-3 text-sm text-stone-500">
+                          {payment.notes}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl bg-stone-50/80 p-4">
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <AmountBlock
+                      label="Paid"
+                      value={Number(payment.jobs?.amount_paid || 0)}
+                    />
+                    <AmountBlock
+                      label="Due"
+                      value={Number(payment.jobs?.amount_outstanding || 0)}
+                      danger
+                    />
                   </div>
 
-                  <div className="text-left md:text-right">
-                    <p className="text-sm text-gray-500">
-                      Total: ${Number(job.total_amount).toFixed(2)}
-                    </p>
-
-                    <p className="text-sm text-gray-500">
-                      Paid: ${Number(job.amount_paid).toFixed(2)}
-                    </p>
-
-                    <p className="text-lg font-bold text-red-700">
-                      Outstanding: $
-                      {Number(job.amount_outstanding).toFixed(2)}
-                    </p>
-
-                    <p className="mt-1 text-xs font-semibold uppercase text-blue-700">
-                      {job.payment_status.replace("_", " ")}
-                    </p>
+                  <div className="mt-4">
+                    {payment.jobs?.id && (
+                      <Link
+                        href={`/jobs/${payment.jobs.id}`}
+                        className="btn-primary"
+                      >
+                        Open Work Order
+                      </Link>
+                    )}
                   </div>
                 </div>
               </div>
-            ))}
+            </div>
+          ))}
+        </div>
 
-            {outstandingJobs.length === 0 && (
-              <p className="text-sm text-gray-500">
-                No outstanding payments. Great work.
-              </p>
-            )}
+        {filteredPayments.length === 0 && (
+          <div className="mt-6 rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center">
+            <p className="text-sm font-semibold text-stone-500">
+              No payments found.
+            </p>
+
+            <button
+              onClick={() => setShowForm(true)}
+              className="btn-primary mt-4"
+            >
+              Record First Payment
+            </button>
           </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function MiniStat({
+  title,
+  value,
+  icon,
+  danger,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-stone-500">{title}</p>
+          <p
+            className={`mt-3 text-3xl font-black tracking-tight ${
+              danger ? "text-red-700" : "text-stone-950"
+            }`}
+          >
+            {value}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-[#f4efe4] p-3 text-[#2b2926]">
+          {icon}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AmountBlock({
+  label,
+  value,
+  danger,
+}: {
+  label: string;
+  value: number;
+  danger?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-bold text-stone-500">{label}</p>
+      <p
+        className={`mt-1 text-sm font-black ${
+          danger ? "text-red-700" : "text-stone-900"
+        }`}
+      >
+        ${value.toFixed(2)}
+      </p>
     </div>
   );
 }
