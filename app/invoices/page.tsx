@@ -77,7 +77,7 @@ export default function InvoicesPage() {
       return;
     }
 
-    setJobs((data || []) as InvoiceJob[]);
+    setJobs((data || []) as unknown as InvoiceJob[]);
   }
 
   const summary = useMemo(() => {
