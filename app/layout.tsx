@@ -1,3 +1,4 @@
+import WorkspaceBrandBar from "@/components/WorkspaceBrandBar";
 import type { Metadata } from "next";
 import "./globals.css";
 import Nav from "@/components/Nav";
@@ -18,19 +19,22 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthGuard>
-          <div className="flex min-h-screen w-full overflow-x-hidden">
-            <Nav />
+<AuthGuard>
+  <div className="flex min-h-screen w-full overflow-x-hidden">
+    <Nav />
 
-            <MobileTopBar />
+    <MobileTopBar />
 
-            <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-28 pt-24 md:p-8">
-              <div className="mx-auto w-full max-w-7xl">{children}</div>
-            </main>
+    <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-28 pt-24 md:p-8">
+      <div className="mx-auto w-full max-w-7xl">
+        <WorkspaceBrandBar />
+        {children}
+      </div>
+    </main>
 
-            <MobileBottomNav />
-          </div>
-        </AuthGuard>
+    <MobileBottomNav />
+  </div>
+</AuthGuard>
       </body>
     </html>
   );

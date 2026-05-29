@@ -8,34 +8,22 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [checking, setChecking] = useState(true);
-
   const publicRoute =
     pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
 
-  useEffect(() => {
-    checkAccess();
-  }, [pathname]);
+  const [checking, setChecking] = useState(!publicRoute);
+  const [allowed, setAllowed] = useState(publicRoute);
 
-  async function checkAccess() {
+  useEffect(() => {
     if (publicRoute) {
       setChecking(false);
+      setAllowed(true);
       return;
     }
 
-    setChecking(true);
+    let mounted = true;
 
-    const sessionResult = await supabase.auth.getSession();
-    const session = sessionResult.data.session;
-
-    if (!session) {
-      router.replace("/login");
-      return;
-    }
-
-    const approvalResult = await supabase.rpc("current_user_is_approved");
-
-    if (approvalResult.error || !approvalResult.data) {
+    async function clearLocalSession() {
       await supabase.auth.signOut({ scope: "global" });
 
       if (typeof window !== "undefined") {
@@ -44,14 +32,77 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
             localStorage.removeItem(key);
           }
         });
-      }
 
-      router.replace("/login");
-      return;
+        sessionStorage.clear();
+      }
     }
 
-    setChecking(false);
-  }
+    async function checkAccess(showLoader: boolean) {
+      if (showLoader) {
+        setChecking(true);
+      }
+
+      const sessionResult = await supabase.auth.getSession();
+      const session = sessionResult.data.session;
+
+      if (!session) {
+        await clearLocalSession();
+
+        if (mounted) {
+          setAllowed(false);
+          setChecking(false);
+          router.replace("/login");
+        }
+
+        return;
+      }
+
+      const approvalResult = await supabase.rpc("current_user_is_approved");
+
+      if (approvalResult.error || !approvalResult.data) {
+        await clearLocalSession();
+
+        if (mounted) {
+          setAllowed(false);
+          setChecking(false);
+          router.replace("/login");
+        }
+
+        return;
+      }
+
+      if (mounted) {
+        setAllowed(true);
+        setChecking(false);
+      }
+    }
+
+    checkAccess(true);
+
+    const focusCheck = () => {
+      checkAccess(false);
+    };
+
+    const interval = window.setInterval(() => {
+      checkAccess(false);
+    }, 5 * 60 * 1000);
+
+    window.addEventListener("focus", focusCheck);
+
+    const authListener = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!session) {
+        setAllowed(false);
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      mounted = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", focusCheck);
+      authListener.data.subscription.unsubscribe();
+    };
+  }, [publicRoute, router]);
 
   if (publicRoute) {
     return <>{children}</>;
@@ -66,15 +117,19 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
           </div>
 
           <h1 className="text-2xl font-black text-stone-950">
-            Checking access
+            Opening workspace
           </h1>
 
           <p className="mt-2 text-sm text-stone-500">
-            Please wait while WorkFlow Pro verifies your session.
+            Verifying your secure session.
           </p>
         </div>
       </div>
     );
+  }
+
+  if (!allowed) {
+    return null;
   }
 
   return <>{children}</>;
