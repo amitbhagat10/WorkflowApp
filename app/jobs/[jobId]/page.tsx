@@ -1,29 +1,100 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 import { useParams } from "next/navigation";
+import {
+  ArrowLeft,
+  Camera,
+  CalendarDays,
+  CheckCircle2,
+  CreditCard,
+  FileText,
+  Mail,
+  MapPin,
+  MessageSquare,
+  Phone,
+  Receipt,
+  RefreshCw,
+  Save,
+  Trash2,
+  Upload,
+  Wrench,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import type { Job, JobPhoto, Payment } from "@/types/app";
 
-export default function JobDetailPage() {
+type ClientInfo = {
+  id: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
+type WorkOrder = {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string | null;
+  job_type: string | null;
+  status: string;
+  payment_status: string;
+  labour_cost: number | null;
+  material_cost: number | null;
+  total_amount: number | null;
+  amount_paid: number | null;
+  amount_outstanding: number | null;
+  appointment_start: string | null;
+  notes: string | null;
+  created_at: string;
+  clients?: ClientInfo | null;
+};
+
+type PaymentRecord = {
+  id: string;
+  job_id: string;
+  amount: number;
+  payment_method: string | null;
+  payment_date: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+type JobPhoto = {
+  id: string;
+  job_id: string;
+  file_path?: string | null;
+  public_url?: string | null;
+  photo_url?: string | null;
+  url?: string | null;
+  caption?: string | null;
+  created_at: string;
+};
+
+export default function WorkOrderDetailPage() {
   const params = useParams();
   const jobId = String(params.jobId);
 
-  const [job, setJob] = useState<Job | null>(null);
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const [job, setJob] = useState<WorkOrder | null>(null);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [photos, setPhotos] = useState<JobPhoto[]>([]);
   const [message, setMessage] = useState("");
+  const [notes, setNotes] = useState("");
   const [uploading, setUploading] = useState(false);
 
-  const [photoType, setPhotoType] = useState<JobPhoto["photo_type"]>("before");
-  const [photoNotes, setPhotoNotes] = useState("");
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    payment_method: "Cash",
+    payment_date: new Date().toISOString().slice(0, 10),
+    notes: "",
+  });
 
   useEffect(() => {
-    loadJobDetail();
+    loadPageData();
   }, []);
 
-  async function loadJobDetail() {
+  async function loadPageData() {
     setMessage("");
 
     const jobResult = await supabase
@@ -32,6 +103,7 @@ export default function JobDetailPage() {
         `
         *,
         clients (
+          id,
           name,
           phone,
           email,
@@ -47,18 +119,18 @@ export default function JobDetailPage() {
       return;
     }
 
-    if (jobResult.data) {
-      setJob(jobResult.data as Job);
-    }
+    const loadedJob = jobResult.data as WorkOrder;
+    setJob(loadedJob);
+    setNotes(loadedJob.notes || "");
 
     const paymentsResult = await supabase
       .from("payments")
       .select("*")
       .eq("job_id", jobId)
-      .order("payment_date", { ascending: false });
+      .order("created_at", { ascending: false });
 
-    if (paymentsResult.data) {
-      setPayments(paymentsResult.data as Payment[]);
+    if (!paymentsResult.error) {
+      setPayments((paymentsResult.data || []) as PaymentRecord[]);
     }
 
     const photosResult = await supabase
@@ -67,82 +139,97 @@ export default function JobDetailPage() {
       .eq("job_id", jobId)
       .order("created_at", { ascending: false });
 
-    if (photosResult.data) {
-      setPhotos(photosResult.data as JobPhoto[]);
+    if (!photosResult.error) {
+      setPhotos((photosResult.data || []) as JobPhoto[]);
     }
   }
 
-  const groupedPhotos = useMemo(() => {
-    return {
-      before: photos.filter((photo) => photo.photo_type === "before"),
-      after: photos.filter((photo) => photo.photo_type === "after"),
-      receipt: photos.filter((photo) => photo.photo_type === "receipt"),
-      damage: photos.filter((photo) => photo.photo_type === "damage"),
-      completion: photos.filter((photo) => photo.photo_type === "completion"),
-      other: photos.filter((photo) => photo.photo_type === "other"),
-    };
-  }, [photos]);
+  async function updateStatus(status: string) {
+    if (!job) return;
 
-  function openMap() {
-    if (!job?.clients?.address) return;
-
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      job.clients.address
-    )}`;
-
-    window.open(url, "_blank");
-  }
-
-  function callClient() {
-    if (!job?.clients?.phone) return;
-    window.location.href = `tel:${job.clients.phone}`;
-  }
-
-  function smsClient() {
-    if (!job?.clients?.phone) return;
-
-    const text = `Hi ${job.clients.name}, this is regarding your handyman job: ${job.title}.`;
-
-    window.location.href = `sms:${job.clients.phone}?&body=${encodeURIComponent(
-      text
-    )}`;
-  }
-
-  function emailClient() {
-    if (!job?.clients?.email) return;
-
-    const subject = `Regarding your job: ${job.title}`;
-    const text = `Hi ${job.clients.name},\n\nThis is regarding your handyman job: ${job.title}.\n\nThanks.`;
-
-    window.location.href = `mailto:${job.clients.email}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(text)}`;
-  }
-
-  async function uploadPhoto(event: React.ChangeEvent<HTMLInputElement>) {
     setMessage("");
+
+    const { error } = await supabase
+      .from("jobs")
+      .update({ status })
+      .eq("id", job.id);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Work order status updated.");
+    loadPageData();
+  }
+
+  async function saveNotes() {
+    if (!job) return;
+
+    setMessage("");
+
+    const { error } = await supabase
+      .from("jobs")
+      .update({ notes: notes.trim() || null })
+      .eq("id", job.id);
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setMessage("Site notes saved.");
+    loadPageData();
+  }
+
+  async function recordPayment(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!job) return;
+
+    setMessage("");
+
+    if (!paymentForm.amount || Number(paymentForm.amount) <= 0) {
+      setMessage("Please enter a valid payment amount.");
+      return;
+    }
+
+    const { error } = await supabase.from("payments").insert({
+      job_id: job.id,
+      amount: Number(paymentForm.amount),
+      payment_method: paymentForm.payment_method,
+      payment_date: paymentForm.payment_date || null,
+      notes: paymentForm.notes.trim() || null,
+    });
+
+    if (error) {
+      setMessage(error.message);
+      return;
+    }
+
+    setPaymentForm({
+      amount: "",
+      payment_method: "Cash",
+      payment_date: new Date().toISOString().slice(0, 10),
+      notes: "",
+    });
+
+    setMessage("Payment recorded successfully.");
+    loadPageData();
+  }
+
+  async function uploadPhoto(event: ChangeEvent<HTMLInputElement>) {
+    if (!job) return;
 
     const file = event.target.files?.[0];
 
     if (!file) return;
 
-    if (!job) {
-      setMessage("Job not loaded yet.");
-      return;
-    }
-
-    const userResult = await supabase.auth.getUser();
-
-    if (!userResult.data.user) {
-      setMessage("Please login first.");
-      return;
-    }
-
     setUploading(true);
+    setMessage("");
 
-    const userId = userResult.data.user.id;
-    const safeFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, "_");
-    const filePath = `${userId}/${job.id}/${crypto.randomUUID()}-${safeFileName}`;
+    const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filePath = `${job.id}/${Date.now()}-${safeFileName}`;
 
     const uploadResult = await supabase.storage
       .from("job-photos")
@@ -152,449 +239,609 @@ export default function JobDetailPage() {
       });
 
     if (uploadResult.error) {
-      setMessage(uploadResult.error.message);
       setUploading(false);
+      setMessage(uploadResult.error.message);
       return;
     }
-
-    const publicUrlResult = supabase.storage
-      .from("job-photos")
-      .getPublicUrl(filePath);
-
-    const photoUrl = publicUrlResult.data.publicUrl;
 
     const insertResult = await supabase.from("job_photos").insert({
       job_id: job.id,
-      photo_url: photoUrl,
-      photo_path: filePath,
-      photo_type: photoType,
-      file_name: file.name,
-      notes: photoNotes || null,
+      file_path: filePath,
     });
 
     if (insertResult.error) {
-      setMessage(insertResult.error.message);
       setUploading(false);
+      setMessage(insertResult.error.message);
       return;
     }
 
-    setPhotoNotes("");
-    setMessage("Photo uploaded successfully.");
     setUploading(false);
-    loadJobDetail();
+    setMessage("Photo uploaded successfully.");
+    event.target.value = "";
+    loadPageData();
   }
 
   async function deletePhoto(photo: JobPhoto) {
     setMessage("");
 
-    if (photo.photo_path) {
-      const storageResult = await supabase.storage
-        .from("job-photos")
-        .remove([photo.photo_path]);
-
-      if (storageResult.error) {
-        setMessage(storageResult.error.message);
-        return;
-      }
+    if (photo.file_path) {
+      await supabase.storage.from("job-photos").remove([photo.file_path]);
     }
 
-    const deleteResult = await supabase
+    const { error } = await supabase
       .from("job_photos")
       .delete()
       .eq("id", photo.id);
 
-    if (deleteResult.error) {
-      setMessage(deleteResult.error.message);
+    if (error) {
+      setMessage(error.message);
       return;
     }
 
     setMessage("Photo deleted.");
-    loadJobDetail();
+    loadPageData();
   }
+
+  function getPhotoUrl(photo: JobPhoto) {
+    if (photo.public_url) return photo.public_url;
+    if (photo.photo_url) return photo.photo_url;
+    if (photo.url) return photo.url;
+
+    if (photo.file_path) {
+      return supabase.storage.from("job-photos").getPublicUrl(photo.file_path)
+        .data.publicUrl;
+    }
+
+    return "";
+  }
+
+  function mapUrl(address: string) {
+    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
+      address
+    )}`;
+  }
+
+  const financials = useMemo(() => {
+    return {
+      labour: Number(job?.labour_cost || 0),
+      material: Number(job?.material_cost || 0),
+      total: Number(job?.total_amount || 0),
+      paid: Number(job?.amount_paid || 0),
+      outstanding: Number(job?.amount_outstanding || 0),
+    };
+  }, [job]);
 
   if (message && !job) {
     return (
       <div className="card">
-        <p className="text-sm text-red-600">{message}</p>
-        <Link href="/jobs" className="btn-secondary mt-4 inline-block">
-          Back to Jobs
+        <p className="text-sm font-semibold text-red-700">{message}</p>
+        <Link href="/jobs" className="btn-secondary mt-4">
+          Back to Work Orders
         </Link>
       </div>
     );
   }
 
   if (!job) {
-    return <p>Loading job detail...</p>;
+    return <p className="text-sm text-stone-500">Loading work order...</p>;
   }
 
+  const client = job.clients;
+
   return (
-    <div>
-      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+    <div className="space-y-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
-          <h1 className="text-3xl font-bold">{job.title}</h1>
-          <p className="text-gray-500">
-            Job details, client information, payments, and work photos.
+          <Link
+            href="/jobs"
+            className="mb-3 inline-flex items-center gap-2 text-sm font-bold text-stone-600"
+          >
+            <ArrowLeft size={16} />
+            Back to Work Orders
+          </Link>
+
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
+            Work Order Command Centre
+          </p>
+
+          <h1 className="page-title">{job.title}</h1>
+
+          <p className="page-subtitle">
+            {client?.name || "No client"} · {job.job_type || "General work"}
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
-          <Link href="/jobs" className="btn-secondary">
-            Back to Jobs
-          </Link>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={loadPageData} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
 
           <Link href={`/invoices/${job.id}`} className="btn-primary">
-            View Invoice
+            <FileText size={16} />
+            Invoice
           </Link>
         </div>
       </div>
 
       {message && (
-        <div className="mb-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-700">
+        <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 text-sm font-semibold text-stone-700">
           {message}
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-3">
-        <div className="card xl:col-span-2">
-          <h2 className="mb-4 text-xl font-bold">Job Summary</h2>
+      <section className="grid gap-4 md:grid-cols-4">
+        <CommandStat
+          title="Status"
+          value={job.status.replace("_", " ")}
+          icon={<CheckCircle2 size={20} />}
+        />
+
+        <CommandStat
+          title="Total"
+          value={`$${financials.total.toFixed(2)}`}
+          icon={<Receipt size={20} />}
+        />
+
+        <CommandStat
+          title="Paid"
+          value={`$${financials.paid.toFixed(2)}`}
+          icon={<CreditCard size={20} />}
+        />
+
+        <CommandStat
+          title="Outstanding"
+          value={`$${financials.outstanding.toFixed(2)}`}
+          icon={<Receipt size={20} />}
+          danger
+        />
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="card">
+          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-stone-900">
+                Job Snapshot
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Key information for the person working on-site.
+              </p>
+            </div>
+
+            <StatusBadge value={job.status} />
+          </div>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <InfoItem label="Job Title" value={job.title} />
-            <InfoItem label="Job Type" value={job.job_type || "Not specified"} />
-            <InfoItem
+            <InfoTile
+              label="Client"
+              value={client?.name || "No client linked"}
+              helper={client?.phone || "No phone"}
+            />
+
+            <InfoTile
               label="Appointment"
               value={
                 job.appointment_start
                   ? new Date(job.appointment_start).toLocaleString()
-                  : "Not specified"
+                  : "No appointment scheduled"
               }
+              helper="Scheduled work time"
             />
-            <InfoItem label="Status" value={job.status.replace("_", " ")} />
-            <InfoItem
-              label="Payment Status"
-              value={job.payment_status.replace("_", " ")}
+
+            <InfoTile
+              label="Work Type"
+              value={job.job_type || "General work"}
+              helper="Service category"
             />
-            <InfoItem label="Due Date" value={job.due_date || "Not specified"} />
-          </div>
 
-          <div className="mt-6">
-            <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
-              Description
-            </h3>
-
-            <p className="rounded-xl bg-gray-50 p-4 text-sm text-gray-700">
-              {job.description || job.notes || "No description added."}
-            </p>
-          </div>
-        </div>
-
-        <div className="card">
-          <h2 className="mb-4 text-xl font-bold">Client</h2>
-
-          <div className="space-y-3 text-sm">
-            <p>
-              <strong>Name:</strong> {job.clients?.name || "No client"}
-            </p>
-
-            <p>
-              <strong>Phone:</strong> {job.clients?.phone || "No phone"}
-            </p>
-
-            <p>
-              <strong>Email:</strong> {job.clients?.email || "No email"}
-            </p>
-
-            <p>
-              <strong>Address:</strong>{" "}
-              {job.clients?.address || "No address"}
-            </p>
-          </div>
-
-          <div className="mt-5 flex flex-col gap-2">
-            <button
-              onClick={callClient}
-              disabled={!job.clients?.phone}
-              className="btn-primary disabled:opacity-50"
-            >
-              Call Client
-            </button>
-
-            <button
-              onClick={smsClient}
-              disabled={!job.clients?.phone}
-              className="btn-secondary disabled:opacity-50"
-            >
-              SMS Client
-            </button>
-
-            <button
-              onClick={emailClient}
-              disabled={!job.clients?.email}
-              className="btn-secondary disabled:opacity-50"
-            >
-              Email Client
-            </button>
-
-            <button
-              onClick={openMap}
-              disabled={!job.clients?.address}
-              className="btn-secondary disabled:opacity-50"
-            >
-              Open Address in Maps
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-3">
-        <div className="card">
-          <h2 className="mb-4 text-xl font-bold">Payment Summary</h2>
-
-          <div className="space-y-3 text-sm">
-            <MoneyRow label="Labour" value={Number(job.labour_cost || 0)} />
-            <MoneyRow label="Material" value={Number(job.material_cost || 0)} />
-            <MoneyRow label="Total" value={Number(job.total_amount || 0)} bold />
-            <MoneyRow label="Paid" value={Number(job.amount_paid || 0)} />
-            <MoneyRow
-              label="Outstanding"
-              value={Number(job.amount_outstanding || 0)}
-              bold
-              danger
+            <InfoTile
+              label="Created"
+              value={new Date(job.created_at).toLocaleDateString()}
+              helper="Work order date"
             />
           </div>
-        </div>
 
-        <div className="card xl:col-span-2">
-          <h2 className="mb-4 text-xl font-bold">Payment History</h2>
+          <div className="mt-5 rounded-2xl bg-stone-50/80 p-4">
+            <p className="text-sm font-black text-stone-900">Description</p>
+            <p className="mt-2 text-sm text-stone-600">
+              {job.description || "No description has been added yet."}
+            </p>
+          </div>
 
-          {payments.length === 0 && (
-            <p className="text-sm text-gray-500">No payments recorded yet.</p>
-          )}
-
-          <div className="space-y-3">
-            {payments.map((payment) => (
-              <div
-                key={payment.id}
-                className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+          <div className="mt-5">
+            <label className="label">Update Status</label>
+            <div className="grid gap-3 md:grid-cols-4">
+              <button
+                onClick={() => updateStatus("booked")}
+                className={job.status === "booked" ? "btn-primary" : "btn-secondary"}
               >
-                <div className="flex flex-col justify-between gap-2 md:flex-row">
-                  <div>
-                    <p className="font-semibold">
-                      ${Number(payment.amount || 0).toFixed(2)}
-                    </p>
-
-                    <p className="text-sm text-gray-500">
-                      {payment.payment_method.replace("_", " ")}
-                    </p>
-                  </div>
-
-                  <p className="text-sm text-gray-500">
-                    {payment.payment_date}
-                  </p>
-                </div>
-
-                {payment.notes && (
-                  <p className="mt-2 text-sm text-gray-600">{payment.notes}</p>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="card mt-6">
-        <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
-          <div>
-            <h2 className="text-xl font-bold">Job Photos</h2>
-            <p className="text-sm text-gray-500">
-              Upload before, after, receipt, damage, and completion photos.
-            </p>
-          </div>
-
-          <button onClick={loadJobDetail} className="btn-secondary">
-            Refresh Photos
-          </button>
-        </div>
-
-        <div className="mb-6 grid gap-4 md:grid-cols-3">
-          <div>
-            <label className="label">Photo Type</label>
-            <select
-              className="input"
-              value={photoType}
-              onChange={(e) =>
-                setPhotoType(e.target.value as JobPhoto["photo_type"])
-              }
-            >
-              <option value="before">Before</option>
-              <option value="after">After</option>
-              <option value="receipt">Receipt</option>
-              <option value="damage">Damage</option>
-              <option value="completion">Completion Proof</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="label">Photo Notes</label>
-            <input
-              className="input"
-              value={photoNotes}
-              onChange={(e) => setPhotoNotes(e.target.value)}
-              placeholder="Optional notes"
-            />
-          </div>
-
-          <div>
-            <label className="label">Upload Photo</label>
-            <input
-              className="input"
-              type="file"
-              accept="image/*"
-              onChange={uploadPhoto}
-              disabled={uploading}
-            />
-          </div>
-        </div>
-
-        {uploading && (
-          <p className="mb-4 text-sm text-gray-500">Uploading photo...</p>
-        )}
-
-        <PhotoSection
-          title="Before Photos"
-          photos={groupedPhotos.before}
-          onDelete={deletePhoto}
-        />
-
-        <PhotoSection
-          title="After Photos"
-          photos={groupedPhotos.after}
-          onDelete={deletePhoto}
-        />
-
-        <PhotoSection
-          title="Receipt Photos"
-          photos={groupedPhotos.receipt}
-          onDelete={deletePhoto}
-        />
-
-        <PhotoSection
-          title="Damage Photos"
-          photos={groupedPhotos.damage}
-          onDelete={deletePhoto}
-        />
-
-        <PhotoSection
-          title="Completion Proof"
-          photos={groupedPhotos.completion}
-          onDelete={deletePhoto}
-        />
-
-        <PhotoSection
-          title="Other Photos"
-          photos={groupedPhotos.other}
-          onDelete={deletePhoto}
-        />
-
-        {photos.length === 0 && (
-          <p className="text-sm text-gray-500">No photos uploaded yet.</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function InfoItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl bg-gray-50 p-4">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-semibold text-gray-900">{value}</p>
-    </div>
-  );
-}
-
-function MoneyRow({
-  label,
-  value,
-  bold = false,
-  danger = false,
-}: {
-  label: string;
-  value: number;
-  bold?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <div
-      className={`flex justify-between border-b border-gray-100 pb-2 ${
-        bold ? "font-bold" : ""
-      }`}
-    >
-      <span>{label}</span>
-      <span className={danger ? "text-red-700" : ""}>
-        ${value.toFixed(2)}
-      </span>
-    </div>
-  );
-}
-
-function PhotoSection({
-  title,
-  photos,
-  onDelete,
-}: {
-  title: string;
-  photos: JobPhoto[];
-  onDelete: (photo: JobPhoto) => void;
-}) {
-  if (photos.length === 0) return null;
-
-  return (
-    <div className="mb-8">
-      <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-gray-500">
-        {title}
-      </h3>
-
-      <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-4">
-        {photos.map((photo) => (
-          <div
-            key={photo.id}
-            className="overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-          >
-            <a href={photo.photo_url} target="_blank">
-              <img
-                src={photo.photo_url}
-                alt={photo.file_name || "Job photo"}
-                className="h-48 w-full object-cover"
-              />
-            </a>
-
-            <div className="p-3">
-              <p className="text-xs font-semibold uppercase text-blue-700">
-                {photo.photo_type}
-              </p>
-
-              {photo.notes && (
-                <p className="mt-1 text-sm text-gray-600">{photo.notes}</p>
-              )}
-
-              <p className="mt-1 text-xs text-gray-500">
-                {new Date(photo.created_at).toLocaleString()}
-              </p>
+                Booked
+              </button>
 
               <button
-                onClick={() => onDelete(photo)}
-                className="mt-3 rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-50"
+                onClick={() => updateStatus("in_progress")}
+                className={
+                  job.status === "in_progress" ? "btn-primary" : "btn-secondary"
+                }
               >
-                Delete Photo
+                In Progress
+              </button>
+
+              <button
+                onClick={() => updateStatus("completed")}
+                className={
+                  job.status === "completed" ? "btn-primary" : "btn-secondary"
+                }
+              >
+                Completed
+              </button>
+
+              <button
+                onClick={() => updateStatus("cancelled")}
+                className={
+                  job.status === "cancelled" ? "btn-danger" : "btn-secondary"
+                }
+              >
+                Cancelled
               </button>
             </div>
           </div>
-        ))}
+        </div>
+
+        <div className="card">
+          <h2 className="text-xl font-black tracking-tight text-stone-900">
+            Client Actions
+          </h2>
+
+          <div className="mt-5 rounded-2xl border border-stone-200 bg-white/70 p-4">
+            <p className="font-black text-stone-900">
+              {client?.name || "No client"}
+            </p>
+            <p className="mt-1 text-sm text-stone-500">
+              {client?.phone || "No phone"} · {client?.email || "No email"}
+            </p>
+            <p className="mt-1 text-sm text-stone-500">
+              {client?.address || "No address"}
+            </p>
+          </div>
+
+          <div className="mt-5 grid gap-3">
+            {client?.phone && (
+              <a href={`tel:${client.phone}`} className="btn-primary">
+                <Phone size={16} />
+                Call Client
+              </a>
+            )}
+
+            {client?.phone && (
+              <a href={`sms:${client.phone}`} className="btn-secondary">
+                <MessageSquare size={16} />
+                Send SMS
+              </a>
+            )}
+
+            {client?.email && (
+              <a href={`mailto:${client.email}`} className="btn-secondary">
+                <Mail size={16} />
+                Email Client
+              </a>
+            )}
+
+            {client?.address && (
+              <a
+                href={mapUrl(client.address)}
+                target="_blank"
+                className="btn-secondary"
+              >
+                <MapPin size={16} />
+                Open Map
+              </a>
+            )}
+
+            <Link href="/notifications" className="btn-secondary">
+              <MessageSquare size={16} />
+              Open Messages
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <div className="card">
+          <h2 className="text-xl font-black tracking-tight text-stone-900">
+            Record Payment
+          </h2>
+
+          <p className="mt-1 text-sm text-stone-500">
+            Capture payment while on-site and keep the invoice balance up to date.
+          </p>
+
+          <form onSubmit={recordPayment} className="mt-5 grid gap-4">
+            <div>
+              <label className="label">Amount Received</label>
+              <input
+                className="input"
+                type="number"
+                min="0"
+                step="0.01"
+                value={paymentForm.amount}
+                onChange={(e) =>
+                  setPaymentForm({ ...paymentForm, amount: e.target.value })
+                }
+                placeholder="0.00"
+              />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="label">Payment Method</label>
+                <select
+                  className="input"
+                  value={paymentForm.payment_method}
+                  onChange={(e) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      payment_method: e.target.value,
+                    })
+                  }
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Card">Card</option>
+                  <option value="EFTPOS">EFTPOS</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Payment Date</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={paymentForm.payment_date}
+                  onChange={(e) =>
+                    setPaymentForm({
+                      ...paymentForm,
+                      payment_date: e.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Payment Note</label>
+              <input
+                className="input"
+                value={paymentForm.notes}
+                onChange={(e) =>
+                  setPaymentForm({ ...paymentForm, notes: e.target.value })
+                }
+                placeholder="Optional note"
+              />
+            </div>
+
+            <button type="submit" className="btn-primary">
+              <CreditCard size={16} />
+              Save Payment
+            </button>
+          </form>
+        </div>
+
+        <div className="card">
+          <h2 className="text-xl font-black tracking-tight text-stone-900">
+            Payment History
+          </h2>
+
+          <div className="mt-5 grid gap-3">
+            {payments.map((payment) => (
+              <div
+                key={payment.id}
+                className="rounded-2xl border border-stone-200 bg-white/75 p-4"
+              >
+                <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+                  <div>
+                    <p className="text-lg font-black text-stone-900">
+                      ${Number(payment.amount || 0).toFixed(2)}
+                    </p>
+
+                    <p className="text-sm text-stone-500">
+                      {payment.payment_method || "Payment"} ·{" "}
+                      {payment.payment_date
+                        ? new Date(payment.payment_date).toLocaleDateString()
+                        : new Date(payment.created_at).toLocaleDateString()}
+                    </p>
+
+                    {payment.notes && (
+                      <p className="mt-2 text-sm text-stone-500">
+                        {payment.notes}
+                      </p>
+                    )}
+                  </div>
+
+                  <CreditCard className="text-stone-400" size={22} />
+                </div>
+              </div>
+            ))}
+
+            {payments.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-6 text-center">
+                <p className="text-sm font-semibold text-stone-500">
+                  No payments recorded yet.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="card">
+          <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-xl font-black tracking-tight text-stone-900">
+                Site Photos
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Capture before, progress, and after photos as proof of work.
+              </p>
+            </div>
+
+            <label className="btn-primary cursor-pointer">
+              <Upload size={16} />
+              {uploading ? "Uploading..." : "Upload Photo"}
+              <input
+                type="file"
+                accept="image/*"
+                onChange={uploadPhoto}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {photos.map((photo) => {
+              const url = getPhotoUrl(photo);
+
+              return (
+                <div
+                  key={photo.id}
+                  className="overflow-hidden rounded-2xl border border-stone-200 bg-white/75"
+                >
+                  {url ? (
+                    <img
+                      src={url}
+                      alt="Job photo"
+                      className="h-48 w-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-48 items-center justify-center bg-stone-100 text-stone-400">
+                      <Camera size={28} />
+                    </div>
+                  )}
+
+                  <div className="p-4">
+                    <p className="text-xs font-bold text-stone-500">
+                      Uploaded {new Date(photo.created_at).toLocaleDateString()}
+                    </p>
+
+                    <button
+                      onClick={() => deletePhoto(photo)}
+                      className="btn-danger mt-3"
+                    >
+                      <Trash2 size={15} />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            {photos.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center md:col-span-2 xl:col-span-3">
+                <Camera className="mx-auto text-stone-400" size={30} />
+                <p className="mt-3 text-sm font-semibold text-stone-500">
+                  No site photos yet. Upload before and after photos to create a stronger job record.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <h2 className="text-xl font-black tracking-tight text-stone-900">
+            Site Notes
+          </h2>
+
+          <p className="mt-1 text-sm text-stone-500">
+            Capture measurements, materials, access notes, or job observations.
+          </p>
+
+          <textarea
+            className="input mt-5 min-h-64"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Example: Measured door frame, client requested timber trim, return required for final coat..."
+          />
+
+          <button onClick={saveNotes} className="btn-primary mt-4">
+            <Save size={16} />
+            Save Notes
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function CommandStat({
+  title,
+  value,
+  icon,
+  danger,
+}: {
+  title: string;
+  value: string | number;
+  icon: ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold text-stone-500">{title}</p>
+          <p
+            className={`mt-3 text-2xl font-black tracking-tight ${
+              danger ? "text-red-700" : "text-stone-950"
+            }`}
+          >
+            {value}
+          </p>
+        </div>
+
+        <div className="rounded-2xl bg-[#f4efe4] p-3 text-[#2b2926]">
+          {icon}
+        </div>
       </div>
     </div>
+  );
+}
+
+function InfoTile({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-white/75 p-4">
+      <p className="text-xs font-black uppercase tracking-wide text-stone-400">
+        {label}
+      </p>
+      <p className="mt-2 font-black text-stone-900">{value}</p>
+      <p className="mt-1 text-sm text-stone-500">{helper}</p>
+    </div>
+  );
+}
+
+function StatusBadge({ value }: { value: string }) {
+  const style =
+    value === "completed"
+      ? "bg-emerald-50 text-emerald-700"
+      : value === "cancelled"
+      ? "bg-red-50 text-red-700"
+      : "bg-[#f4efe4] text-[#2b2926]";
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
+    >
+      {value.replace("_", " ")}
+    </span>
   );
 }
