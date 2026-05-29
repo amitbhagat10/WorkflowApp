@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   MapPin,
   MessageSquare,
-  Navigation,
   Phone,
   RefreshCw,
   Search,
@@ -15,15 +16,13 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
-type ScheduleFilter = "today" | "upcoming" | "past" | "no_appointment" | "all";
-
 type ScheduleJob = {
   id: string;
   title: string;
   description: string | null;
   job_type: string | null;
-  status: string;
-  payment_status: string;
+  status: string | null;
+  payment_status: string | null;
   appointment_start: string | null;
   total_amount: number | null;
   amount_paid: number | null;
@@ -37,11 +36,16 @@ type ScheduleJob = {
   } | null;
 };
 
+const weekDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
 export default function CalendarPage() {
   const [jobs, setJobs] = useState<ScheduleJob[]>([]);
   const [message, setMessage] = useState("");
-  const [filter, setFilter] = useState<ScheduleFilter>("today");
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewDate, setViewDate] = useState(() => new Date());
+  const [selectedDateKey, setSelectedDateKey] = useState(() =>
+    dateToKey(new Date())
+  );
 
   useEffect(() => {
     loadJobs();
@@ -73,99 +77,86 @@ export default function CalendarPage() {
     setJobs((data || []) as unknown as ScheduleJob[]);
   }
 
-  function isToday(dateValue: string | null) {
-    if (!dateValue) return false;
+  const calendarDays = useMemo(() => {
+    return buildCalendarDays(viewDate);
+  }, [viewDate]);
 
-    const today = new Date();
-    const date = new Date(dateValue);
+  const jobsByDate = useMemo(() => {
+    const map: Record<string, ScheduleJob[]> = {};
 
-    return date.toDateString() === today.toDateString();
-  }
+    jobs.forEach((job) => {
+      if (!job.appointment_start) return;
 
-  function isUpcoming(dateValue: string | null) {
-    if (!dateValue) return false;
+      const key = dateToKey(new Date(job.appointment_start));
 
-    const now = new Date();
-    const date = new Date(dateValue);
+      if (!map[key]) {
+        map[key] = [];
+      }
 
-    return date >= now;
-  }
+      map[key].push(job);
+    });
 
-  function isPast(dateValue: string | null) {
-    if (!dateValue) return false;
-
-    const now = new Date();
-    const date = new Date(dateValue);
-
-    return date < now;
-  }
-
-  const stats = useMemo(() => {
-    return {
-      today: jobs.filter((job) => isToday(job.appointment_start)).length,
-      upcoming: jobs.filter((job) => isUpcoming(job.appointment_start)).length,
-      past: jobs.filter((job) => isPast(job.appointment_start)).length,
-      noAppointment: jobs.filter((job) => !job.appointment_start).length,
-      all: jobs.length,
-    };
+    return map;
   }, [jobs]);
 
-  const filteredJobs = useMemo(() => {
+  const filteredSelectedJobs = useMemo(() => {
+    const selectedJobs = jobsByDate[selectedDateKey] || [];
     const search = searchTerm.trim().toLowerCase();
 
-    return jobs.filter((job) => {
-      const matchesSearch =
-        !search ||
+    if (!search) return selectedJobs;
+
+    return selectedJobs.filter((job) => {
+      return (
         job.title.toLowerCase().includes(search) ||
         (job.job_type || "").toLowerCase().includes(search) ||
         (job.description || "").toLowerCase().includes(search) ||
         (job.clients?.name || "").toLowerCase().includes(search) ||
         (job.clients?.phone || "").toLowerCase().includes(search) ||
-        (job.clients?.address || "").toLowerCase().includes(search);
-
-      let matchesFilter = true;
-
-      if (filter === "today") {
-        matchesFilter = isToday(job.appointment_start);
-      }
-
-      if (filter === "upcoming") {
-        matchesFilter = isUpcoming(job.appointment_start);
-      }
-
-      if (filter === "past") {
-        matchesFilter = isPast(job.appointment_start);
-      }
-
-      if (filter === "no_appointment") {
-        matchesFilter = !job.appointment_start;
-      }
-
-      if (filter === "all") {
-        matchesFilter = true;
-      }
-
-      return matchesSearch && matchesFilter;
+        (job.clients?.address || "").toLowerCase().includes(search)
+      );
     });
-  }, [jobs, filter, searchTerm]);
+  }, [jobsByDate, selectedDateKey, searchTerm]);
 
-  const groupedJobs = useMemo(() => {
-    const groups: Record<string, ScheduleJob[]> = {};
+  const unscheduledJobs = useMemo(() => {
+    return jobs.filter((job) => !job.appointment_start);
+  }, [jobs]);
 
-    filteredJobs.forEach((job) => {
-      const key = job.appointment_start
-        ? new Date(job.appointment_start).toDateString()
-        : "No appointment scheduled";
+  const monthJobs = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
 
-      if (!groups[key]) {
-        groups[key] = [];
-      }
+    return jobs.filter((job) => {
+      if (!job.appointment_start) return false;
 
-      groups[key].push(job);
+      const date = new Date(job.appointment_start);
+
+      return date.getFullYear() === year && date.getMonth() === month;
     });
+  }, [jobs, viewDate]);
 
-    return groups;
-  }, [filteredJobs]);
+  const selectedDate = keyToDate(selectedDateKey);
+  const monthLabel = viewDate.toLocaleDateString(undefined, {
+    month: "long",
+    year: "numeric",
+  });
+
+  function previousMonth() {
+    setViewDate(
+      new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1)
+    );
+  }
+
+  function nextMonth() {
+    setViewDate(
+      new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1)
+    );
+  }
+
+  function goToday() {
+    const today = new Date();
+    setViewDate(today);
+    setSelectedDateKey(dateToKey(today));
+  }
 
   function mapUrl(address: string) {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
@@ -182,14 +173,20 @@ export default function CalendarPage() {
           </p>
           <h1 className="page-title">Schedule</h1>
           <p className="page-subtitle">
-            View today’s work, upcoming appointments, and unscheduled work orders.
+            Click a calendar date to view booked work orders for that day.
           </p>
         </div>
 
-        <button onClick={loadJobs} className="btn-secondary">
-          <RefreshCw size={16} />
-          Refresh
-        </button>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={goToday} className="btn-secondary">
+            Today
+          </button>
+
+          <button onClick={loadJobs} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {message && (
@@ -198,48 +195,128 @@ export default function CalendarPage() {
         </div>
       )}
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <ScheduleStat
-          title="Today"
-          value={stats.today}
-          active={filter === "today"}
-          onClick={() => setFilter("today")}
-        />
-
-        <ScheduleStat
-          title="Upcoming"
-          value={stats.upcoming}
-          active={filter === "upcoming"}
-          onClick={() => setFilter("upcoming")}
-        />
-
-        <ScheduleStat
-          title="Past"
-          value={stats.past}
-          active={filter === "past"}
-          onClick={() => setFilter("past")}
-        />
-
-        <ScheduleStat
-          title="No Appointment"
-          value={stats.noAppointment}
-          active={filter === "no_appointment"}
-          onClick={() => setFilter("no_appointment")}
-        />
-
-        <ScheduleStat
-          title="All"
-          value={stats.all}
-          active={filter === "all"}
-          onClick={() => setFilter("all")}
-        />
+      <section className="grid gap-4 md:grid-cols-4">
+        <MiniStat title="This Month" value={monthJobs.length} />
+        <MiniStat title="Selected Day" value={filteredSelectedJobs.length} />
+        <MiniStat title="Unscheduled" value={unscheduledJobs.length} />
+        <MiniStat title="Total Work Orders" value={jobs.length} />
       </section>
 
-      <section className="card">
-        <div className="grid gap-4 md:grid-cols-[1fr_220px]">
-          <div>
-            <label className="label">Search Schedule</label>
-            <div className="relative">
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="card">
+          <div className="mb-5 flex flex-col justify-between gap-4 md:flex-row md:items-center">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-stone-900">
+                {monthLabel}
+              </h2>
+              <p className="mt-1 text-sm text-stone-500">
+                Dates with work orders show a count inside the calendar.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={previousMonth} className="btn-secondary">
+                <ChevronLeft size={17} />
+              </button>
+
+              <button onClick={nextMonth} className="btn-secondary">
+                <ChevronRight size={17} />
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-2">
+            {weekDays.map((day) => (
+              <div
+                key={day}
+                className="py-2 text-center text-xs font-black uppercase tracking-wide text-stone-400"
+              >
+                {day}
+              </div>
+            ))}
+
+            {calendarDays.map((day) => {
+              const key = dateToKey(day);
+              const dayJobs = jobsByDate[key] || [];
+              const isSelected = key === selectedDateKey;
+              const isToday = key === dateToKey(new Date());
+              const isCurrentMonth = day.getMonth() === viewDate.getMonth();
+
+              return (
+                <button
+                  key={key}
+                  onClick={() => setSelectedDateKey(key)}
+                  className={`min-h-24 rounded-2xl border p-3 text-left transition ${
+                    isSelected
+                      ? "border-[#2b2926] bg-[#f4efe4] shadow-sm"
+                      : "border-stone-200 bg-white/75 hover:bg-white"
+                  } ${
+                    isCurrentMonth ? "opacity-100" : "opacity-45"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`flex h-8 w-8 items-center justify-center rounded-xl text-sm font-black ${
+                        isToday
+                          ? "bg-[#2b2926] text-[#d8bd82]"
+                          : "text-stone-900"
+                      }`}
+                    >
+                      {day.getDate()}
+                    </span>
+
+                    {dayJobs.length > 0 && (
+                      <span className="rounded-full bg-[#2b2926] px-2 py-1 text-xs font-black text-[#d8bd82]">
+                        {dayJobs.length}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-3 space-y-1">
+                    {dayJobs.slice(0, 2).map((job) => (
+                      <div
+                        key={job.id}
+                        className="truncate rounded-full bg-white/80 px-2 py-1 text-xs font-bold text-stone-600"
+                      >
+                        {job.title}
+                      </div>
+                    ))}
+
+                    {dayJobs.length > 2 && (
+                      <p className="pl-1 text-xs font-bold text-stone-500">
+                        +{dayJobs.length - 2} more
+                      </p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="mb-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+                <CalendarDays size={20} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-stone-900">
+                  {selectedDate.toLocaleDateString(undefined, {
+                    weekday: "long",
+                    day: "numeric",
+                    month: "long",
+                  })}
+                </h2>
+                <p className="text-sm text-stone-500">
+                  {filteredSelectedJobs.length} work order
+                  {filteredSelectedJobs.length === 1 ? "" : "s"}
+                </p>
+              </div>
+            </div>
+
+            <div className="relative mt-5">
               <Search
                 size={17}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
@@ -248,235 +325,175 @@ export default function CalendarPage() {
                 className="input pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search work, client, phone, address..."
+                placeholder="Search selected day..."
               />
             </div>
           </div>
 
-          <div>
-            <label className="label">View</label>
-            <select
-              className="input"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value as ScheduleFilter)}
-            >
-              <option value="today">Today</option>
-              <option value="upcoming">Upcoming</option>
-              <option value="past">Past</option>
-              <option value="no_appointment">No appointment</option>
-              <option value="all">All work orders</option>
-            </select>
+          <div className="grid gap-4">
+            {filteredSelectedJobs.map((job) => (
+              <ScheduleCard key={job.id} job={job} mapUrl={mapUrl} />
+            ))}
+
+            {filteredSelectedJobs.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center">
+                <CalendarDays className="mx-auto text-stone-400" size={30} />
+
+                <h3 className="mt-3 text-lg font-black text-stone-900">
+                  No work booked
+                </h3>
+
+                <p className="mt-1 text-sm text-stone-500">
+                  Select another date or create a work order with an appointment.
+                </p>
+
+                <div className="mt-5">
+                  <Link href="/jobs" className="btn-primary">
+                    Create Work Order
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      <section className="space-y-6">
-        {Object.entries(groupedJobs).map(([dateLabel, dateJobs]) => (
-          <div key={dateLabel} className="card">
-            <div className="mb-5 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-xl font-black tracking-tight text-stone-900">
-                  {dateLabel}
-                </h2>
-                <p className="mt-1 text-sm text-stone-500">
-                  {dateJobs.length} work order{dateJobs.length === 1 ? "" : "s"}
-                </p>
-              </div>
+      {unscheduledJobs.length > 0 && (
+        <section className="card">
+          <div className="mb-5">
+            <h2 className="text-xl font-black tracking-tight text-stone-900">
+              Unscheduled Work Orders
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              These jobs do not have an appointment date yet.
+            </p>
+          </div>
 
-              <div className="flex items-center gap-2 rounded-2xl bg-[#f4efe4] px-4 py-2 text-sm font-black text-[#2b2926]">
-                <CalendarDays size={16} />
-                Schedule View
-              </div>
-            </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {unscheduledJobs.slice(0, 6).map((job) => (
+              <div
+                key={job.id}
+                className="rounded-2xl border border-stone-200 bg-white/75 p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+                    <Wrench size={18} />
+                  </div>
 
-            <div className="grid gap-4">
-              {dateJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm"
-                >
-                  <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
-                    <div className="min-w-0">
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
-                          <Wrench size={20} />
-                        </div>
-
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-black text-stone-900">
-                              {job.title}
-                            </h3>
-
-                            <StatusBadge value={job.status} />
-                            <PaymentBadge value={job.payment_status} />
-                          </div>
-
-                          <p className="mt-1 text-sm text-stone-500">
-                            {job.clients?.name || "No client"} ·{" "}
-                            {job.job_type || "General work"}
-                          </p>
-
-                          <p className="mt-1 text-sm text-stone-500">
-                            {job.clients?.address || "No address added"}
-                          </p>
-
-                          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-stone-500">
-                            <span className="inline-flex items-center gap-1 rounded-full bg-[#f4efe4] px-3 py-1 text-[#2b2926]">
-                              <Clock size={13} />
-                              {job.appointment_start
-                                ? new Date(job.appointment_start).toLocaleTimeString(
-                                    [],
-                                    {
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    }
-                                  )
-                                : "No time"}
-                            </span>
-
-                            <span className="rounded-full bg-stone-100 px-3 py-1">
-                              Created{" "}
-                              {new Date(job.created_at).toLocaleDateString()}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="rounded-2xl bg-stone-50/80 p-4">
-                      <div className="grid grid-cols-3 gap-3 text-center">
-                        <AmountBlock
-                          label="Total"
-                          value={Number(job.total_amount || 0)}
-                        />
-                        <AmountBlock
-                          label="Paid"
-                          value={Number(job.amount_paid || 0)}
-                        />
-                        <AmountBlock
-                          label="Due"
-                          value={Number(job.amount_outstanding || 0)}
-                          danger
-                        />
-                      </div>
-
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-                        {job.clients?.phone && (
-                          <a
-                            href={`tel:${job.clients.phone}`}
-                            className="btn-secondary"
-                          >
-                            <Phone size={15} />
-                            Call
-                          </a>
-                        )}
-
-                        {job.clients?.phone && (
-                          <a
-                            href={`sms:${job.clients.phone}`}
-                            className="btn-secondary"
-                          >
-                            <MessageSquare size={15} />
-                            SMS
-                          </a>
-                        )}
-
-                        {job.clients?.address && (
-                          <a
-                            href={mapUrl(job.clients.address)}
-                            target="_blank"
-                            className="btn-secondary"
-                          >
-                            <MapPin size={15} />
-                            Map
-                          </a>
-                        )}
-
-                        <Link href={`/jobs/${job.id}`} className="btn-primary">
-                          Open
-                        </Link>
-                      </div>
-                    </div>
+                  <div className="min-w-0">
+                    <h3 className="truncate font-black text-stone-900">
+                      {job.title}
+                    </h3>
+                    <p className="mt-1 text-sm text-stone-500">
+                      {job.clients?.name || "No client"}
+                    </p>
                   </div>
                 </div>
-              ))}
-            </div>
+
+                <Link href={`/jobs/${job.id}`} className="btn-secondary mt-4">
+                  Open Work Order
+                </Link>
+              </div>
+            ))}
           </div>
-        ))}
 
-        {filteredJobs.length === 0 && (
-          <div className="card text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
-              <Navigation size={24} />
-            </div>
-
-            <h2 className="mt-4 text-xl font-black text-stone-900">
-              No scheduled work found
-            </h2>
-
-            <p className="mx-auto mt-2 max-w-md text-sm text-stone-500">
-              Try changing the schedule filter or create a work order with an appointment time.
+          {unscheduledJobs.length > 6 && (
+            <p className="mt-4 text-sm font-semibold text-stone-500">
+              Showing 6 of {unscheduledJobs.length} unscheduled jobs.
             </p>
-
-            <div className="mt-5 flex justify-center">
-              <Link href="/jobs" className="btn-primary">
-                Create Work Order
-              </Link>
-            </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
     </div>
   );
 }
 
-function ScheduleStat({
-  title,
-  value,
-  active,
-  onClick,
+function ScheduleCard({
+  job,
+  mapUrl,
 }: {
-  title: string;
-  value: string | number;
-  active: boolean;
-  onClick: () => void;
+  job: ScheduleJob;
+  mapUrl: (address: string) => string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`rounded-[1.35rem] border p-5 text-left shadow-sm transition ${
-        active
-          ? "border-[#d8d0c1] bg-[#f4efe4]"
-          : "border-stone-200 bg-white/80 hover:bg-white"
-      }`}
-    >
-      <p className="text-sm font-bold text-stone-500">{title}</p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-stone-950">
-        {value}
-      </p>
-    </button>
+    <div className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm">
+      <div className="flex items-start gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
+          <Wrench size={20} />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-black text-stone-900">{job.title}</h3>
+            <StatusBadge value={job.status || "booked"} />
+          </div>
+
+          <p className="mt-1 text-sm text-stone-500">
+            {job.clients?.name || "No client"} · {job.job_type || "General work"}
+          </p>
+
+          <p className="mt-1 text-sm text-stone-500">
+            {job.clients?.address || "No address added"}
+          </p>
+
+          <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-stone-500">
+            <span className="inline-flex items-center gap-1 rounded-full bg-[#f4efe4] px-3 py-1 text-[#2b2926]">
+              <Clock size={13} />
+              {job.appointment_start
+                ? new Date(job.appointment_start).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "No time"}
+            </span>
+
+            <span className="rounded-full bg-stone-100 px-3 py-1">
+              Due ${Number(job.amount_outstanding || 0).toFixed(2)}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {job.clients?.phone && (
+              <a href={`tel:${job.clients.phone}`} className="btn-secondary">
+                <Phone size={15} />
+                Call
+              </a>
+            )}
+
+            {job.clients?.phone && (
+              <a href={`sms:${job.clients.phone}`} className="btn-secondary">
+                <MessageSquare size={15} />
+                SMS
+              </a>
+            )}
+
+            {job.clients?.address && (
+              <a
+                href={mapUrl(job.clients.address)}
+                target="_blank"
+                className="btn-secondary"
+              >
+                <MapPin size={15} />
+                Map
+              </a>
+            )}
+
+            <Link href={`/jobs/${job.id}`} className="btn-primary">
+              Open
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function AmountBlock({
-  label,
-  value,
-  danger,
-}: {
-  label: string;
-  value: number;
-  danger?: boolean;
-}) {
+function MiniStat({ title, value }: { title: string; value: string | number }) {
   return (
-    <div>
-      <p className="text-xs font-bold text-stone-500">{label}</p>
-      <p
-        className={`mt-1 text-sm font-black ${
-          danger ? "text-red-700" : "text-stone-900"
-        }`}
-      >
-        ${value.toFixed(2)}
+    <div className="card">
+      <p className="text-sm font-bold text-stone-500">{title}</p>
+      <p className="mt-3 text-3xl font-black tracking-tight text-stone-950">
+        {value}
       </p>
     </div>
   );
@@ -488,7 +505,9 @@ function StatusBadge({ value }: { value: string }) {
       ? "bg-emerald-50 text-emerald-700"
       : value === "cancelled"
       ? "bg-red-50 text-red-700"
-      : "bg-[#f4efe4] text-[#2b2926]";
+      : value === "in_progress"
+      ? "bg-[#f4efe4] text-[#2b2926]"
+      : "bg-stone-100 text-stone-600";
 
   return (
     <span
@@ -499,19 +518,33 @@ function StatusBadge({ value }: { value: string }) {
   );
 }
 
-function PaymentBadge({ value }: { value: string }) {
-  const style =
-    value === "paid"
-      ? "bg-emerald-50 text-emerald-700"
-      : value === "overdue"
-      ? "bg-red-50 text-red-700"
-      : "bg-stone-100 text-stone-600";
+function dateToKey(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
 
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
-    >
-      {value.replace("_", " ")}
-    </span>
-  );
+  return `${year}-${month}-${day}`;
+}
+
+function keyToDate(key: string) {
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function buildCalendarDays(viewDate: Date) {
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const firstDayOfMonth = new Date(year, month, 1);
+  const mondayBasedStart = (firstDayOfMonth.getDay() + 6) % 7;
+
+  const calendarStart = new Date(year, month, 1 - mondayBasedStart);
+
+  return Array.from({ length: 42 }, (_, index) => {
+    return new Date(
+      calendarStart.getFullYear(),
+      calendarStart.getMonth(),
+      calendarStart.getDate() + index
+    );
+  });
 }
