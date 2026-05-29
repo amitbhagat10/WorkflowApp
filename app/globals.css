@@ -354,3 +354,61 @@ a {
 .card a:not(.btn-primary):not(.btn-secondary):not(.btn-danger):hover {
   color: #b08d57 !important;
 }
+/* Professional search bars across Work Orders, Schedule, Payments, Invoices */
+.relative:has(input.input[placeholder^="Search"]) {
+  width: 100%;
+}
+
+.relative:has(input.input[placeholder^="Search"]) input.input {
+  height: 50px !important;
+  border-radius: 1.25rem !important;
+  border: 1px solid rgba(216, 208, 193, 0.95) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  padding-left: 3rem !important;
+  padding-right: 1rem !important;
+  font-size: 0.92rem !important;
+  font-weight: 650 !important;
+  color: #2b2926 !important;
+  box-shadow: 0 10px 24px rgba(43, 41, 38, 0.045) !important;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease,
+    transform 180ms ease !important;
+}
+
+.relative:has(input.input[placeholder^="Search"]) input.input::placeholder {
+  color: #9a948b !important;
+  font-weight: 600 !important;
+}
+
+.relative:has(input.input[placeholder^="Search"]) input.input:focus {
+  border-color: #2b2926 !important;
+  background: #ffffff !important;
+  box-shadow:
+    0 0 0 4px rgba(43, 41, 38, 0.07),
+    0 14px 30px rgba(43, 41, 38, 0.07) !important;
+  outline: none !important;
+}
+
+.relative:has(input.input[placeholder^="Search"]) svg {
+  left: 1rem !important;
+  color: #8f877d !important;
+  z-index: 2 !important;
+}
+
+.relative:has(input.input[placeholder^="Search"])::after {
+  content: "";
+  position: absolute;
+  inset: 6px auto 6px 2.6rem;
+  width: 1px;
+  background: rgba(216, 208, 193, 0.75);
+  pointer-events: none;
+}
+
+@media (max-width: 768px) {
+  .relative:has(input.input[placeholder^="Search"]) input.input {
+    height: 48px !important;
+    font-size: 0.88rem !important;
+  }
+}

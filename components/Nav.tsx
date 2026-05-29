@@ -85,7 +85,7 @@ export default function Nav() {
         </p>
 
         <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 px-3 py-2 text-xs font-bold text-stone-200">
-          Executive workspace
+          Operations workspace
         </div>
       </div>
 
@@ -127,7 +127,7 @@ export default function Nav() {
           Workspace
         </p>
         <p className="mt-2 text-sm text-stone-600">
-          Manage work orders, clients, payments, and schedules from one clean view.
+          A secure field-service workspace for daily operations, billing, and client communication.
         </p>
       </div>
 

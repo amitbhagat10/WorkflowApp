@@ -33,7 +33,7 @@ export default function MobileTopBar() {
   }
 
   return (
-    <div className="no-print fixed left-0 right-0 top-0 z-50 border-b border-stone-200 bg-[#f8f6f1]/95 px-4 py-3 shadow-sm backdrop-blur md:hidden">
+    <div className="no-print fixed left-0 right-0 top-0 z-50 border-b border-stone-200/80 bg-[#faf8f2]/95 px-4 py-3 shadow-sm backdrop-blur-xl md:hidden">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[#2b2926] text-sm font-black text-[#d8bd82]">
@@ -41,16 +41,18 @@ export default function MobileTopBar() {
           </div>
 
           <div>
-            <p className="text-sm font-black text-stone-950">WorkFlow Pro</p>
+            <p className="text-sm font-black leading-tight text-stone-950">
+              WorkFlow Pro
+            </p>
             <p className="text-xs font-semibold text-stone-500">
-              Secure workspace
+              Field operations
             </p>
           </div>
         </div>
 
         <button
           onClick={signOut}
-          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white/90 px-3 py-2 text-xs font-black text-stone-700 shadow-sm"
+          className="flex items-center gap-2 rounded-2xl border border-stone-200 bg-white px-3 py-2 text-xs font-black text-stone-700 shadow-sm transition hover:bg-stone-50"
         >
           <LogOut size={15} />
           Logout
