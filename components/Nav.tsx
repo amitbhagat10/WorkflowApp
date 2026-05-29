@@ -10,6 +10,7 @@ import {
   FileText,
   Home,
   LogOut,
+  Settings,
   ShieldCheck,
   Users,
   Wrench,
@@ -24,6 +25,7 @@ const baseLinks = [
   { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/notifications", label: "Messages", icon: Bell },
   { href: "/invoices", label: "Invoices", icon: FileText },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Nav() {

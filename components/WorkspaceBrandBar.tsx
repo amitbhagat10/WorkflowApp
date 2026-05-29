@@ -13,6 +13,7 @@ type WorkspaceBrand = {
   plan: string;
   trial_ends_at: string | null;
   primary_color: string | null;
+  logo_url: string | null;
 };
 
 export default function WorkspaceBrandBar() {
@@ -38,7 +39,7 @@ export default function WorkspaceBrandBar() {
     const { data, error } = await supabase
       .from("workspaces")
       .select(
-        "id, name, branding_name, status, plan, trial_ends_at, primary_color"
+        "id, name, branding_name, status, plan, trial_ends_at, primary_color, logo_url"
       )
       .eq("id", workspaceResult.data)
       .single();
@@ -73,10 +74,18 @@ export default function WorkspaceBrandBar() {
       <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
         <div className="flex min-w-0 items-center gap-4">
           <div
-            className="flex h-13 w-13 shrink-0 items-center justify-center rounded-2xl text-sm font-black text-white shadow-sm"
+            className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-sm font-black text-white shadow-sm"
             style={{ backgroundColor: brandColor }}
           >
-            {displayName.slice(0, 2).toUpperCase()}
+            {workspace.logo_url ? (
+              <img
+                src={workspace.logo_url}
+                alt={`${displayName} logo`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              displayName.slice(0, 2).toUpperCase()
+            )}
           </div>
 
           <div className="min-w-0">
@@ -89,40 +98,40 @@ export default function WorkspaceBrandBar() {
             </h2>
 
             <p className="mt-1 text-sm font-medium text-stone-500">
-              Field service operations, scheduling, payments and client records.
+              Field operations, scheduling, payments and client records.
             </p>
           </div>
         </div>
 
-<div className="flex flex-wrap items-center gap-2">
-  {workspace.status === "trial" ? (
-    <>
-      <span className="inline-flex items-center gap-2 rounded-full bg-[#f4efe4] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#2b2926]">
-        <ShieldCheck size={14} />
-        Trial workspace
-      </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {workspace.status === "trial" ? (
+            <>
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#f4efe4] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#2b2926]">
+                <ShieldCheck size={14} />
+                Trial workspace
+              </span>
 
-      {remainingDays !== null && (
-        <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-stone-700 shadow-sm">
-          <CalendarDays size={14} />
-          {remainingDays} day{remainingDays === 1 ? "" : "s"} left
-        </span>
-      )}
-    </>
-  ) : (
-    <>
-      <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-emerald-700">
-        <CheckCircle2 size={14} />
-        Active workspace
-      </span>
+              {remainingDays !== null && (
+                <span className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-xs font-black uppercase tracking-wide text-stone-700 shadow-sm">
+                  <CalendarDays size={14} />
+                  {remainingDays} day{remainingDays === 1 ? "" : "s"} left
+                </span>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-xs font-black uppercase tracking-wide text-emerald-700">
+                <CheckCircle2 size={14} />
+                Active workspace
+              </span>
 
-      <span className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-stone-600">
-        <ShieldCheck size={14} />
-        {workspace.plan} plan
-      </span>
-    </>
-  )}
-</div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-stone-100 px-4 py-2 text-xs font-black uppercase tracking-wide text-stone-600">
+                <ShieldCheck size={14} />
+                {workspace.plan} plan
+              </span>
+            </>
+          )}
+        </div>
       </div>
     </section>
   );
