@@ -62,9 +62,13 @@ export default function Nav() {
     router.refresh();
   }
 
-  const links = isAdmin
-    ? [...baseLinks, { href: "/admin/users", label: "Admin", icon: ShieldCheck }]
-    : baseLinks;
+const links = isAdmin
+  ? [
+      ...baseLinks,
+      { href: "/admin/users", label: "Users", icon: ShieldCheck },
+      { href: "/admin/workspaces", label: "Workspaces", icon: ShieldCheck },
+    ]
+  : baseLinks;
 
   return (
     <aside className="no-print hidden min-h-screen w-72 shrink-0 border-r border-stone-200 bg-[#f8f6f1]/95 p-5 shadow-sm backdrop-blur-xl md:block">
