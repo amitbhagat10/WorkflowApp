@@ -70,7 +70,7 @@ export default function CalendarPage() {
       return;
     }
 
-    setJobs((data || []) as ScheduleJob[]);
+    setJobs((data || []) as unknown as ScheduleJob[]);
   }
 
   function isToday(dateValue: string | null) {

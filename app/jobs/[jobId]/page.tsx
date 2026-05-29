@@ -119,7 +119,7 @@ export default function WorkOrderDetailPage() {
       return;
     }
 
-    const loadedJob = jobResult.data as WorkOrder;
+    const loadedJob = jobResult.data as unknown as WorkOrder;
     setJob(loadedJob);
     setNotes(loadedJob.notes || "");
 
@@ -130,7 +130,7 @@ export default function WorkOrderDetailPage() {
       .order("created_at", { ascending: false });
 
     if (!paymentsResult.error) {
-      setPayments((paymentsResult.data || []) as PaymentRecord[]);
+      setPayments((paymentsResult.data || []) as unknown as PaymentRecord[]);
     }
 
     const photosResult = await supabase
@@ -140,7 +140,7 @@ export default function WorkOrderDetailPage() {
       .order("created_at", { ascending: false });
 
     if (!photosResult.error) {
-      setPhotos((photosResult.data || []) as JobPhoto[]);
+      setPhotos((photosResult.data || []) as unknown as JobPhoto[]);
     }
   }
 

@@ -116,8 +116,8 @@ export default function PaymentsPage() {
       return;
     }
 
-    setJobs((jobsResult.data || []) as JobOption[]);
-    setPayments((paymentsResult.data || []) as PaymentRecord[]);
+    setJobs((jobsResult.data || []) as unknown as JobOption[]);
+    setPayments((paymentsResult.data || []) as unknown as PaymentRecord[]);
   }
 
   async function createPayment(e: React.FormEvent) {
