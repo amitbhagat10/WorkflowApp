@@ -1,165 +1,106 @@
 "use client";
 
-import { ReactNode, useEffect, useState } from "react";
-import { LogOut, ShieldAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-type BlockedAccess = {
-  reason: string;
-  workspace_name?: string;
-  status?: string;
-  plan?: string;
-};
+const ACCESS_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
-export default function AuthGuard({ children }: { children: ReactNode }) {
+export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const publicRoute =
-    pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
+  const [checking, setChecking] = useState(true);
+  const [blockedMessage, setBlockedMessage] = useState("");
 
-  const [checking, setChecking] = useState(!publicRoute);
-  const [allowed, setAllowed] = useState(publicRoute);
-  const [blocked, setBlocked] = useState<BlockedAccess | null>(null);
+  const lastAccessCheckRef = useRef(0);
+  const hasValidAccessRef = useRef(false);
+  const isCheckingRef = useRef(false);
+
+  const publicPaths = [
+    "/login",
+    "/auth/callback",
+    "/auth/update-password",
+    "/auth/change-password",
+  ];
+
+  const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
 
   useEffect(() => {
-    if (publicRoute) {
+    if (isPublicPath) {
       setChecking(false);
-      setAllowed(true);
-      setBlocked(null);
+      setBlockedMessage("");
       return;
     }
 
-    let mounted = true;
+    const recentlyChecked =
+      hasValidAccessRef.current &&
+      Date.now() - lastAccessCheckRef.current < ACCESS_CHECK_INTERVAL_MS;
 
-    async function clearLocalSession() {
-      try {
-  await supabase.auth.signOut({ scope: "local" });
-} catch {
-  // Ignore stale refresh token errors
-}
-
-      if (typeof window !== "undefined") {
-        Object.keys(localStorage).forEach((key) => {
-          if (key.startsWith("sb-")) {
-            localStorage.removeItem(key);
-          }
-        });
-
-        sessionStorage.clear();
-      }
+    if (recentlyChecked) {
+      setChecking(false);
+      return;
     }
 
-    async function checkAccess(showLoader: boolean) {
-      if (showLoader) {
-        setChecking(true);
-      }
+    checkAccess({
+      showLoader: !hasValidAccessRef.current,
+      force: false,
+    });
+  }, [pathname]);
 
-      const sessionResult = await supabase.auth.getSession();
-      const session = sessionResult.data.session;
-
-      if (!session) {
-        await clearLocalSession();
-
-        if (mounted) {
-          setAllowed(false);
-          setBlocked(null);
-          setChecking(false);
-          router.replace("/login");
-        }
-
-        return;
-      }
-
-      const accessResult = await supabase.rpc("current_user_access_status");
-
-      if (accessResult.error) {
-        await clearLocalSession();
-
-        if (mounted) {
-          setAllowed(false);
-          setBlocked(null);
-          setChecking(false);
-          router.replace("/login");
-        }
-
-        return;
-      }
-
-      const access = accessResult.data as BlockedAccess & { allowed?: boolean };
-
-      if (!access?.allowed) {
-        const blockReasons = [
-          "trial_expired",
-          "workspace_expired",
-          "workspace_suspended",
-          "workspace_inactive",
-        ];
-
-        if (blockReasons.includes(access?.reason || "")) {
-          if (mounted) {
-            setAllowed(false);
-            setBlocked(access);
-            setChecking(false);
-          }
-
-          return;
-        }
-
-        await clearLocalSession();
-
-        if (mounted) {
-          setAllowed(false);
-          setBlocked(null);
-          setChecking(false);
-          router.replace("/login");
-        }
-
-        return;
-      }
-
-      if (mounted) {
-        setAllowed(true);
-        setBlocked(null);
-        setChecking(false);
-      }
-    }
-
-    checkAccess(true);
-
-    const focusCheck = () => {
-      checkAccess(false);
-    };
-
-    const interval = window.setInterval(() => {
-      checkAccess(false);
-    }, 5 * 60 * 1000);
-
-    window.addEventListener("focus", focusCheck);
-
-    const authListener = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) {
-        setAllowed(false);
-        setBlocked(null);
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        hasValidAccessRef.current = false;
+        lastAccessCheckRef.current = 0;
         router.replace("/login");
+        return;
+      }
+
+      if (!isPublicPath && ["SIGNED_IN", "TOKEN_REFRESHED", "USER_UPDATED"].includes(event)) {
+        checkAccess({
+          showLoader: false,
+          force: true,
+        });
       }
     });
 
     return () => {
-      mounted = false;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", focusCheck);
-      authListener.data.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [publicRoute, router]);
+  }, [isPublicPath]);
 
-  async function signOut() {
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      if (isPublicPath) return;
+
+      const stale =
+        Date.now() - lastAccessCheckRef.current > ACCESS_CHECK_INTERVAL_MS;
+
+      if (stale) {
+        checkAccess({
+          showLoader: false,
+          force: true,
+        });
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [isPublicPath]);
+
+  async function clearLocalSession() {
     try {
-  await supabase.auth.signOut({ scope: "local" });
-} catch {
-  // Ignore stale refresh token errors
-}
+      await supabase.auth.signOut({ scope: "local" });
+    } catch {
+      // Ignore stale refresh token errors
+    }
 
     if (typeof window !== "undefined") {
       Object.keys(localStorage).forEach((key) => {
@@ -170,99 +111,142 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
 
       sessionStorage.clear();
     }
-
-    router.replace("/login");
   }
 
-  if (publicRoute) {
-    return <>{children}</>;
+  async function checkAccess({
+    showLoader,
+    force,
+  }: {
+    showLoader: boolean;
+    force: boolean;
+  }) {
+    if (isCheckingRef.current) return;
+
+    const recentlyChecked =
+      hasValidAccessRef.current &&
+      Date.now() - lastAccessCheckRef.current < ACCESS_CHECK_INTERVAL_MS;
+
+    if (!force && recentlyChecked) {
+      setChecking(false);
+      return;
+    }
+
+    isCheckingRef.current = true;
+
+    if (showLoader) {
+      setChecking(true);
+    }
+
+    setBlockedMessage("");
+
+    try {
+      const sessionResult = await supabase.auth.getSession();
+
+      if (!sessionResult.data.session) {
+        hasValidAccessRef.current = false;
+        lastAccessCheckRef.current = 0;
+        router.replace("/login");
+        return;
+      }
+
+      const accessResult = await supabase.rpc("current_user_access_status");
+
+      if (accessResult.error) {
+        const fallbackResult = await supabase.rpc("current_user_is_approved");
+
+        if (fallbackResult.error || !fallbackResult.data) {
+          hasValidAccessRef.current = false;
+          lastAccessCheckRef.current = 0;
+          await clearLocalSession();
+          router.replace("/login");
+          return;
+        }
+      } else {
+        const status = String(accessResult.data || "");
+
+        if (status !== "allowed") {
+          hasValidAccessRef.current = false;
+          lastAccessCheckRef.current = 0;
+          setBlockedMessage(getBlockedMessage(status));
+          return;
+        }
+      }
+
+      const mustChangeResult = await supabase.rpc(
+        "current_user_must_change_password"
+      );
+
+      if (!mustChangeResult.error && mustChangeResult.data === true) {
+        hasValidAccessRef.current = false;
+        router.replace("/auth/change-password");
+        return;
+      }
+
+      hasValidAccessRef.current = true;
+      lastAccessCheckRef.current = Date.now();
+      setBlockedMessage("");
+    } finally {
+      isCheckingRef.current = false;
+      setChecking(false);
+    }
   }
 
   if (checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#faf8f2] p-6">
-        <div className="rounded-[1.75rem] border border-stone-200 bg-white/90 p-8 text-center shadow-xl shadow-stone-900/10">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#2b2926] text-lg font-black text-[#d8bd82]">
-            WP
-          </div>
-
-          <h1 className="text-2xl font-black text-stone-950">
-            Opening workspace
-          </h1>
-
-          <p className="mt-2 text-sm text-stone-500">
-            Verifying your secure session.
-          </p>
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f4f1] px-4">
+        <div className="rounded-[2rem] border border-stone-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-stone-200 border-t-stone-900" />
+          <p className="text-sm font-black text-stone-700">Checking access...</p>
         </div>
       </div>
     );
   }
 
-  if (blocked) {
+  if (blockedMessage) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#faf8f2] p-6">
-        <div className="w-full max-w-xl rounded-[2rem] border border-stone-200 bg-white p-8 text-center shadow-xl shadow-stone-900/10">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 text-red-700">
-            <ShieldAlert size={30} />
+      <div className="flex min-h-screen items-center justify-center bg-[#f3f4f1] px-4">
+        <div className="max-w-md rounded-[2rem] border border-stone-200 bg-white p-8 text-center shadow-xl">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-50 text-xl font-black text-red-700">
+            !
           </div>
 
-          <p className="mt-6 text-xs font-black uppercase tracking-[0.22em] text-stone-400">
-            Workspace Access
-          </p>
-
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-stone-950">
-            {blocked.reason === "trial_expired"
-              ? "Trial has expired"
-              : blocked.reason === "workspace_suspended"
-              ? "Workspace suspended"
-              : "Workspace unavailable"}
+          <h1 className="text-2xl font-black tracking-tight text-stone-950">
+            Access unavailable
           </h1>
 
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-stone-500">
-            {blocked.workspace_name || "This workspace"} is currently not active.
-            Please contact the WorkFlow Pro administrator to reactivate access or
-            upgrade the workspace.
+          <p className="mt-3 text-sm font-semibold leading-relaxed text-stone-500">
+            {blockedMessage}
           </p>
 
-          <div className="mt-6 rounded-2xl bg-stone-50 p-4 text-left">
-            <div className="grid gap-3 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="font-bold text-stone-500">Workspace</span>
-                <span className="font-black text-stone-900">
-                  {blocked.workspace_name || "Not available"}
-                </span>
-              </div>
-
-              <div className="flex justify-between gap-4">
-                <span className="font-bold text-stone-500">Status</span>
-                <span className="font-black capitalize text-stone-900">
-                  {(blocked.status || blocked.reason).replace("_", " ")}
-                </span>
-              </div>
-
-              {blocked.plan && (
-                <div className="flex justify-between gap-4">
-                  <span className="font-bold text-stone-500">Plan</span>
-                  <span className="font-black capitalize text-stone-900">
-                    {blocked.plan}
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <button onClick={signOut} className="btn-primary mt-6">
-            <LogOut size={16} />
-            Sign out
+          <button
+            onClick={async () => {
+              await clearLocalSession();
+              router.replace("/login");
+            }}
+            className="btn-primary mt-6"
+          >
+            Back to Login
           </button>
         </div>
       </div>
     );
   }
 
-  if (!allowed) {
-    return null;
-  }
-
   return <>{children}</>;
+}
+
+function getBlockedMessage(status: string) {
+  const messages: Record<string, string> = {
+    not_signed_in: "Please sign in again.",
+    not_approved: "This email is not approved for WorkFlow Pro.",
+    inactive: "This user has been deactivated.",
+    suspended: "This workspace has been suspended.",
+    expired: "This workspace is no longer active.",
+    trial_expired: "This trial workspace has expired.",
+  };
+
+  return (
+    messages[status] ||
+    "Your account is not currently allowed to access this workspace."
+  );
 }
