@@ -1,5 +1,5 @@
 "use client";
-
+import TechnicianSelect from "@/components/TechnicianSelect";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -447,16 +447,13 @@ export default function JobsPage() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-3">
-              <div>
-                <label className="label">Assigned To</label>
-                <input
-                  className="input"
-                  value={form.assigned_to}
-                  onChange={(e) =>
-                    setForm({ ...form, assigned_to: e.target.value })
-                  }
-                  placeholder="Technician name"
-                />
+<div>
+  <label className="label">Assigned To</label>
+  <TechnicianSelect
+    value={form.assigned_to}
+    onChange={(value) => setForm({ ...form, assigned_to: value })}
+  />
+</div>
               </div>
 
               <div>
