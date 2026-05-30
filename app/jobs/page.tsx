@@ -4,12 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
   CalendarDays,
+  CheckCircle2,
+  Clock,
   MapPin,
-  MessageSquare,
-  Phone,
   Plus,
   RefreshCw,
   Search,
+  UserRound,
   Wrench,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -18,31 +19,58 @@ type ClientOption = {
   id: string;
   name: string;
   phone: string | null;
-  email: string | null;
   address: string | null;
 };
 
-type WorkOrder = {
+type JobRecord = {
   id: string;
-  client_id: string;
+  workspace_id?: string | null;
+  client_id: string | null;
+  job_number: string | null;
   title: string;
   description: string | null;
   job_type: string | null;
-  status: string;
-  payment_status: string;
+  status: string | null;
+  payment_status: string | null;
+  priority: string | null;
+  assigned_to: string | null;
+  due_date: string | null;
+  appointment_start: string | null;
   labour_cost: number | null;
   material_cost: number | null;
   total_amount: number | null;
   amount_paid: number | null;
   amount_outstanding: number | null;
-  appointment_start: string | null;
-  notes: string | null;
   created_at: string;
   clients?: ClientOption | null;
 };
 
+const statusSteps = [
+  "new",
+  "booked",
+  "in_progress",
+  "completed",
+  "invoiced",
+];
+
+const statusLabels: Record<string, string> = {
+  new: "New",
+  booked: "Booked",
+  in_progress: "In Progress",
+  completed: "Completed",
+  invoiced: "Invoiced",
+  cancelled: "Cancelled",
+};
+
+const priorityLabels: Record<string, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  urgent: "Urgent",
+};
+
 export default function JobsPage() {
-  const [jobs, setJobs] = useState<WorkOrder[]>([]);
+  const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
@@ -53,41 +81,59 @@ export default function JobsPage() {
     client_id: "",
     title: "",
     description: "",
-    job_type: "",
-    status: "booked",
+    job_type: "General Service",
+    status: "new",
+    priority: "medium",
+    assigned_to: "",
+    appointment_start: "",
+    due_date: "",
     labour_cost: "",
     material_cost: "",
-    appointment_start: "",
-    notes: "",
   });
 
   useEffect(() => {
-    loadPageData();
+    loadData();
   }, []);
 
-  async function loadPageData() {
+  async function loadData() {
     setMessage("");
 
     const clientsResult = await supabase
       .from("clients")
-      .select("id, name, phone, email, address")
-      .order("name", { ascending: true });
+      .select("id, name, phone, address")
+      .order("name");
 
-    if (clientsResult.error) {
-      setMessage(clientsResult.error.message);
-      return;
+    if (!clientsResult.error) {
+      setClients((clientsResult.data || []) as unknown as ClientOption[]);
     }
 
     const jobsResult = await supabase
       .from("jobs")
       .select(
         `
-        *,
+        id,
+        workspace_id,
+        client_id,
+        job_number,
+        title,
+        description,
+        job_type,
+        status,
+        payment_status,
+        priority,
+        assigned_to,
+        due_date,
+        appointment_start,
+        labour_cost,
+        material_cost,
+        total_amount,
+        amount_paid,
+        amount_outstanding,
+        created_at,
         clients (
           id,
           name,
           phone,
-          email,
           address
         )
       `
@@ -99,8 +145,7 @@ export default function JobsPage() {
       return;
     }
 
-    setClients((clientsResult.data || []) as ClientOption[]);
-    setJobs((jobsResult.data || []) as WorkOrder[]);
+    setJobs((jobsResult.data || []) as unknown as JobRecord[]);
   }
 
   async function createJob(e: React.FormEvent) {
@@ -117,16 +162,39 @@ export default function JobsPage() {
       return;
     }
 
+    const workspaceResult = await supabase.rpc("current_user_workspace_id");
+
+    if (workspaceResult.error || !workspaceResult.data) {
+      setMessage("Could not find your workspace. Please logout and login again.");
+      return;
+    }
+
+    const labour = Number(form.labour_cost || 0);
+    const material = Number(form.material_cost || 0);
+    const total = labour + material;
+
+    const jobNumber = `WO-${new Date().getFullYear()}-${Date.now()
+      .toString()
+      .slice(-6)}`;
+
     const { error } = await supabase.from("jobs").insert({
+      workspace_id: workspaceResult.data,
       client_id: form.client_id,
+      job_number: jobNumber,
       title: form.title.trim(),
       description: form.description.trim() || null,
-      job_type: form.job_type.trim() || null,
+      job_type: form.job_type,
       status: form.status,
-      labour_cost: Number(form.labour_cost || 0),
-      material_cost: Number(form.material_cost || 0),
+      payment_status: total > 0 ? "unpaid" : "not_required",
+      priority: form.priority,
+      assigned_to: form.assigned_to.trim() || null,
       appointment_start: form.appointment_start || null,
-      notes: form.notes.trim() || null,
+      due_date: form.due_date || null,
+      labour_cost: labour,
+      material_cost: material,
+      total_amount: total,
+      amount_paid: 0,
+      amount_outstanding: total,
     });
 
     if (error) {
@@ -138,91 +206,90 @@ export default function JobsPage() {
       client_id: "",
       title: "",
       description: "",
-      job_type: "",
-      status: "booked",
+      job_type: "General Service",
+      status: "new",
+      priority: "medium",
+      assigned_to: "",
+      appointment_start: "",
+      due_date: "",
       labour_cost: "",
       material_cost: "",
-      appointment_start: "",
-      notes: "",
     });
 
     setShowForm(false);
     setMessage("Work order created successfully.");
-    loadPageData();
+    loadData();
   }
 
-  async function updateStatus(jobId: string, status: string) {
-    setMessage("");
+  async function moveToNextStatus(job: JobRecord) {
+    const current = job.status || "new";
+    const currentIndex = statusSteps.indexOf(current);
+
+    if (currentIndex === -1 || currentIndex === statusSteps.length - 1) {
+      return;
+    }
+
+    const nextStatus = statusSteps[currentIndex + 1];
 
     const { error } = await supabase
       .from("jobs")
-      .update({ status })
-      .eq("id", jobId);
+      .update({ status: nextStatus })
+      .eq("id", job.id);
 
     if (error) {
       setMessage(error.message);
       return;
     }
 
-    setMessage("Work order status updated.");
-    loadPageData();
+    loadData();
   }
+
+  const stats = useMemo(() => {
+    return {
+      total: jobs.length,
+      active: jobs.filter((job) =>
+        ["new", "booked", "in_progress"].includes(job.status || "new")
+      ).length,
+      completed: jobs.filter((job) => job.status === "completed").length,
+      invoiced: jobs.filter((job) => job.status === "invoiced").length,
+      urgent: jobs.filter((job) => job.priority === "urgent").length,
+    };
+  }, [jobs]);
 
   const filteredJobs = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
     return jobs.filter((job) => {
+      const matchesStatus =
+        statusFilter === "all" || (job.status || "new") === statusFilter;
+
       const matchesSearch =
         !search ||
         job.title.toLowerCase().includes(search) ||
-        (job.description || "").toLowerCase().includes(search) ||
-        (job.job_type || "").toLowerCase().includes(search) ||
+        (job.job_number || "").toLowerCase().includes(search) ||
         (job.clients?.name || "").toLowerCase().includes(search) ||
-        (job.clients?.phone || "").toLowerCase().includes(search) ||
-        (job.clients?.address || "").toLowerCase().includes(search);
+        (job.assigned_to || "").toLowerCase().includes(search) ||
+        (job.job_type || "").toLowerCase().includes(search);
 
-      const matchesStatus =
-        statusFilter === "all" || job.status === statusFilter;
-
-      return matchesSearch && matchesStatus;
+      return matchesStatus && matchesSearch;
     });
   }, [jobs, searchTerm, statusFilter]);
-
-  const stats = useMemo(() => {
-    return {
-      total: jobs.length,
-      active: jobs.filter(
-        (job) => job.status !== "completed" && job.status !== "cancelled"
-      ).length,
-      completed: jobs.filter((job) => job.status === "completed").length,
-      outstanding: jobs.reduce(
-        (sum, job) => sum + Number(job.amount_outstanding || 0),
-        0
-      ),
-    };
-  }, [jobs]);
-
-  function mapUrl(address: string) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-      address
-    )}`;
-  }
 
   return (
     <div className="space-y-8">
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
-            Work Management
+            Work Order Command
           </p>
           <h1 className="page-title">Work Orders</h1>
           <p className="page-subtitle">
-            Create, schedule, and monitor field work without clutter.
+            Create, schedule, track and progress every job from request to invoice.
           </p>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <button onClick={loadPageData} className="btn-secondary">
+          <button onClick={loadData} className="btn-secondary">
             <RefreshCw size={16} />
             Refresh
           </button>
@@ -232,70 +299,74 @@ export default function JobsPage() {
             className="btn-primary"
           >
             <Plus size={16} />
-            {showForm ? "Close Form" : "New Work Order"}
+            {showForm ? "Close" : "New Work Order"}
           </button>
         </div>
       </div>
 
       {message && (
-        <div className="rounded-2xl border border-stone-200 bg-white/80 p-4 text-sm font-semibold text-stone-700">
+        <div className="rounded-2xl border border-stone-200 bg-white/90 p-4 text-sm font-semibold text-stone-700 shadow-sm">
           {message}
         </div>
       )}
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MiniStat title="Total Work Orders" value={stats.total} />
-        <MiniStat title="Active Work" value={stats.active} />
+      <section className="grid gap-4 md:grid-cols-5">
+        <MiniStat title="Total Jobs" value={stats.total} />
+        <MiniStat title="Active" value={stats.active} />
         <MiniStat title="Completed" value={stats.completed} />
-        <MiniStat
-          title="Outstanding"
-          value={`$${stats.outstanding.toFixed(2)}`}
-          danger
-        />
+        <MiniStat title="Invoiced" value={stats.invoiced} />
+        <MiniStat title="Urgent" value={stats.urgent} alert />
       </section>
 
       {showForm && (
         <section className="card">
-          <div className="mb-5">
-            <h2 className="text-xl font-black tracking-tight text-stone-900">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black tracking-tight text-stone-950">
               New Work Order
             </h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Add the work details, client, schedule, and estimated costs.
+            <p className="mt-1 text-sm font-semibold text-stone-500">
+              Add the job details, priority, schedule and estimated charges.
             </p>
           </div>
 
-          <form onSubmit={createJob} className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label className="label">Client</label>
-              <select
-                className="input"
-                value={form.client_id}
-                onChange={(e) =>
-                  setForm({ ...form, client_id: e.target.value })
-                }
-              >
-                <option value="">Select client</option>
-                {clients.map((client) => (
-                  <option key={client.id} value={client.id}>
-                    {client.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <form onSubmit={createJob} className="grid gap-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="label">Client</label>
+                <select
+                  className="input"
+                  value={form.client_id}
+                  onChange={(e) =>
+                    setForm({ ...form, client_id: e.target.value })
+                  }
+                >
+                  <option value="">Select client</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="label">Status</label>
-              <select
-                className="input"
-                value={form.status}
-                onChange={(e) => setForm({ ...form, status: e.target.value })}
-              >
-                <option value="booked">Booked</option>
-                <option value="in_progress">In Progress</option>
-                <option value="completed">Completed</option>
-                <option value="cancelled">Cancelled</option>
-              </select>
+              <div>
+                <label className="label">Work Type</label>
+                <select
+                  className="input"
+                  value={form.job_type}
+                  onChange={(e) =>
+                    setForm({ ...form, job_type: e.target.value })
+                  }
+                >
+                  <option>General Service</option>
+                  <option>Emergency Callout</option>
+                  <option>Repair</option>
+                  <option>Installation</option>
+                  <option>Inspection</option>
+                  <option>Maintenance</option>
+                  <option>Quote Visit</option>
+                </select>
+              </div>
             </div>
 
             <div>
@@ -304,37 +375,92 @@ export default function JobsPage() {
                 className="input"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Fix leaking tap"
+                placeholder="Example: Replace leaking kitchen tap"
               />
             </div>
 
             <div>
-              <label className="label">Work Type</label>
-              <input
-                className="input"
-                value={form.job_type}
+              <label className="label">Job Notes</label>
+              <textarea
+                className="input min-h-28"
+                value={form.description}
                 onChange={(e) =>
-                  setForm({ ...form, job_type: e.target.value })
+                  setForm({ ...form, description: e.target.value })
                 }
-                placeholder="Plumbing, electrical, repair..."
+                placeholder="Describe the issue, site instructions, materials required, or customer notes..."
               />
             </div>
 
-            <div>
-              <label className="label">Appointment</label>
-              <input
-                className="input"
-                type="datetime-local"
-                value={form.appointment_start}
-                onChange={(e) =>
-                  setForm({ ...form, appointment_start: e.target.value })
-                }
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-4">
               <div>
-                <label className="label">Labour Cost</label>
+                <label className="label">Status</label>
+                <select
+                  className="input"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="new">New</option>
+                  <option value="booked">Booked</option>
+                  <option value="in_progress">In Progress</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Priority</label>
+                <select
+                  className="input"
+                  value={form.priority}
+                  onChange={(e) =>
+                    setForm({ ...form, priority: e.target.value })
+                  }
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="urgent">Urgent</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Appointment</label>
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={form.appointment_start}
+                  onChange={(e) =>
+                    setForm({ ...form, appointment_start: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="label">Due Date</label>
+                <input
+                  className="input"
+                  type="date"
+                  value={form.due_date}
+                  onChange={(e) =>
+                    setForm({ ...form, due_date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-5 md:grid-cols-3">
+              <div>
+                <label className="label">Assigned To</label>
+                <input
+                  className="input"
+                  value={form.assigned_to}
+                  onChange={(e) =>
+                    setForm({ ...form, assigned_to: e.target.value })
+                  }
+                  placeholder="Technician name"
+                />
+              </div>
+
+              <div>
+                <label className="label">Labour Estimate</label>
                 <input
                   className="input"
                   type="number"
@@ -349,7 +475,7 @@ export default function JobsPage() {
               </div>
 
               <div>
-                <label className="label">Material Cost</label>
+                <label className="label">Material Estimate</label>
                 <input
                   className="input"
                   type="number"
@@ -364,31 +490,9 @@ export default function JobsPage() {
               </div>
             </div>
 
-            <div className="md:col-span-2">
-              <label className="label">Description</label>
-              <textarea
-                className="input min-h-24"
-                value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                placeholder="Describe the work required..."
-              />
-            </div>
-
-            <div className="md:col-span-2">
-              <label className="label">Internal Notes</label>
-              <textarea
-                className="input min-h-20"
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Optional notes for the business..."
-              />
-            </div>
-
-            <div className="flex gap-3 md:col-span-2">
+            <div className="flex flex-col gap-3 sm:flex-row">
               <button type="submit" className="btn-primary">
-                Save Work Order
+                Create Work Order
               </button>
 
               <button
@@ -404,168 +508,65 @@ export default function JobsPage() {
       )}
 
       <section className="card">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div>
-            <h2 className="text-xl font-black tracking-tight text-stone-900">
-              Work Order Directory
+            <h2 className="text-2xl font-black tracking-tight text-stone-950">
+              Job Lifecycle
             </h2>
-            <p className="mt-1 text-sm text-stone-500">
-              Search, filter, and open active work quickly.
+            <p className="mt-1 text-sm font-semibold text-stone-500">
+              Search, filter and progress work orders through the delivery pipeline.
             </p>
           </div>
 
-          <div className="grid gap-3 md:grid-cols-[1fr_180px]">
-            <div className="relative">
-              <Search
-                size={17}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
-              />
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="flex items-center gap-3 rounded-[1.25rem] border border-stone-200 bg-white px-4 py-3 shadow-sm">
+              <Search size={18} className="text-stone-400" />
               <input
-                className="input pl-10"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search work orders..."
+                placeholder="Search jobs..."
+                className="w-full min-w-64 border-0 bg-transparent text-sm font-bold text-stone-800 outline-none placeholder:text-stone-400"
               />
             </div>
 
             <select
-              className="input"
+              className="input min-w-48"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="all">All Status</option>
+              <option value="all">All statuses</option>
+              <option value="new">New</option>
               <option value="booked">Booked</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
+              <option value="invoiced">Invoiced</option>
               <option value="cancelled">Cancelled</option>
             </select>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4">
+        <div className="space-y-4">
           {filteredJobs.map((job) => (
-            <div
-              key={job.id}
-              className="rounded-2xl border border-stone-200 bg-white/75 p-4 transition hover:bg-white hover:shadow-sm"
-            >
-              <div className="grid gap-4 xl:grid-cols-[1fr_270px]">
-                <div className="min-w-0">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[#f4efe4] text-[#2b2926]">
-                      <Wrench size={20} />
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="text-lg font-black text-stone-900">
-                          {job.title}
-                        </h3>
-
-                        <StatusBadge value={job.status} />
-                        <PaymentBadge value={job.payment_status} />
-                      </div>
-
-                      <p className="mt-1 text-sm text-stone-500">
-                        {job.clients?.name || "No client"} ·{" "}
-                        {job.job_type || "General work"}
-                      </p>
-
-                      <p className="mt-1 text-sm text-stone-500">
-                        {job.clients?.address || "No address added"}
-                      </p>
-
-                      <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold text-stone-500">
-                        <span className="rounded-full bg-stone-100 px-3 py-1">
-                          Created {new Date(job.created_at).toLocaleDateString()}
-                        </span>
-
-                        <span className="rounded-full bg-[#f4efe4] px-3 py-1 text-[#2b2926]">
-                          {job.appointment_start
-                            ? new Date(job.appointment_start).toLocaleString()
-                            : "No appointment"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl bg-stone-50/80 p-4">
-                  <div className="grid grid-cols-3 gap-3 text-center">
-                    <AmountBlock
-                      label="Total"
-                      value={Number(job.total_amount || 0)}
-                    />
-                    <AmountBlock
-                      label="Paid"
-                      value={Number(job.amount_paid || 0)}
-                    />
-                    <AmountBlock
-                      label="Due"
-                      value={Number(job.amount_outstanding || 0)}
-                      danger
-                    />
-                  </div>
-
-                  <div className="mt-4 grid gap-2">
-                    <select
-                      className="input"
-                      value={job.status}
-                      onChange={(e) => updateStatus(job.id, e.target.value)}
-                    >
-                      <option value="booked">Booked</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                      <option value="cancelled">Cancelled</option>
-                    </select>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      {job.clients?.phone && (
-                        <a href={`tel:${job.clients.phone}`} className="btn-secondary">
-                          <Phone size={15} />
-                          Call
-                        </a>
-                      )}
-
-                      {job.clients?.phone && (
-                        <a href={`sms:${job.clients.phone}`} className="btn-secondary">
-                          <MessageSquare size={15} />
-                          SMS
-                        </a>
-                      )}
-
-                      {job.clients?.address && (
-                        <a
-                          href={mapUrl(job.clients.address)}
-                          target="_blank"
-                          className="btn-secondary"
-                        >
-                          <MapPin size={15} />
-                          Map
-                        </a>
-                      )}
-
-                      <Link href={`/jobs/${job.id}`} className="btn-primary">
-                        Open
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <JobCard key={job.id} job={job} onNextStatus={moveToNextStatus} />
           ))}
         </div>
 
         {filteredJobs.length === 0 && (
-          <div className="mt-6 rounded-2xl border border-dashed border-stone-300 bg-stone-50/70 p-8 text-center">
-            <p className="text-sm font-semibold text-stone-500">
-              No work orders found.
+          <div className="rounded-[1.5rem] border border-dashed border-stone-300 bg-stone-50/80 p-10 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3ead6] text-[#1b1a18]">
+              <Wrench size={24} />
+            </div>
+
+            <h3 className="mt-4 text-2xl font-black text-stone-950">
+              No work orders found
+            </h3>
+
+            <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-stone-500">
+              Try changing your filter or create the first work order for this workspace.
             </p>
 
-            <button
-              onClick={() => setShowForm(true)}
-              className="btn-primary mt-4"
-            >
-              Create Work Order
+            <button onClick={() => setShowForm(true)} className="btn-primary mt-5">
+              New Work Order
             </button>
           </div>
         )}
@@ -574,21 +575,161 @@ export default function JobsPage() {
   );
 }
 
+function JobCard({
+  job,
+  onNextStatus,
+}: {
+  job: JobRecord;
+  onNextStatus: (job: JobRecord) => void;
+}) {
+  const status = job.status || "new";
+  const nextStatus = getNextStatus(status);
+  const outstanding = Number(job.amount_outstanding || 0);
+
+  return (
+    <div className="rounded-[1.5rem] border border-stone-200 bg-white/90 p-5 shadow-sm transition hover:border-stone-300 hover:shadow-md">
+      <div className="grid gap-5 xl:grid-cols-[1fr_280px] xl:items-center">
+        <div className="min-w-0">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-stone-600">
+              {job.job_number || "Work Order"}
+            </span>
+
+            <StatusBadge value={status} />
+            <PriorityBadge value={job.priority || "medium"} />
+          </div>
+
+          <h3 className="truncate text-xl font-black tracking-tight text-stone-950">
+            {job.title}
+          </h3>
+
+          <div className="mt-3 grid gap-2 text-sm font-semibold text-stone-500 md:grid-cols-2">
+            <p className="flex items-center gap-2">
+              <UserRound size={15} />
+              {job.clients?.name || "No client"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <Wrench size={15} />
+              {job.job_type || "General Service"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <CalendarDays size={15} />
+              {job.appointment_start
+                ? new Date(job.appointment_start).toLocaleString()
+                : "No appointment set"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <Clock size={15} />
+              {job.due_date
+                ? `Due ${new Date(job.due_date).toLocaleDateString()}`
+                : "No due date"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <CheckCircle2 size={15} />
+              {job.assigned_to || "Unassigned"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <MapPin size={15} />
+              <span className="truncate">
+                {job.clients?.address || "No site address"}
+              </span>
+            </p>
+          </div>
+
+          <Pipeline status={status} />
+        </div>
+
+        <div className="rounded-[1.25rem] bg-stone-50 p-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="font-bold text-stone-400">Total</p>
+              <p className="mt-1 text-lg font-black text-stone-950">
+                ${Number(job.total_amount || 0).toFixed(2)}
+              </p>
+            </div>
+
+            <div>
+              <p className="font-bold text-stone-400">Outstanding</p>
+              <p
+                className={`mt-1 text-lg font-black ${
+                  outstanding > 0 ? "text-red-600" : "text-stone-950"
+                }`}
+              >
+                ${outstanding.toFixed(2)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-2">
+            {nextStatus && (
+              <button onClick={() => onNextStatus(job)} className="btn-primary">
+                Move to {statusLabels[nextStatus]}
+              </button>
+            )}
+
+            <Link href={`/jobs/${job.id}`} className="btn-secondary">
+              Open Job
+            </Link>
+
+            <Link href={`/invoices/${job.id}`} className="btn-secondary">
+              Invoice
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Pipeline({ status }: { status: string }) {
+  return (
+    <div className="mt-5 grid grid-cols-5 gap-2">
+      {statusSteps.map((step) => {
+        const currentIndex = statusSteps.indexOf(status);
+        const stepIndex = statusSteps.indexOf(step);
+        const done = currentIndex >= stepIndex;
+
+        return (
+          <div key={step}>
+            <div
+              className={`h-2 rounded-full ${
+                done ? "bg-[#1b1a18]" : "bg-stone-200"
+              }`}
+            />
+            <p
+              className={`mt-2 hidden text-[10px] font-black uppercase tracking-wide md:block ${
+                done ? "text-stone-800" : "text-stone-400"
+              }`}
+            >
+              {statusLabels[step]}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MiniStat({
   title,
   value,
-  danger,
+  alert,
 }: {
   title: string;
-  value: string | number;
-  danger?: boolean;
+  value: number;
+  alert?: boolean;
 }) {
   return (
     <div className="card">
       <p className="text-sm font-bold text-stone-500">{title}</p>
       <p
         className={`mt-3 text-3xl font-black tracking-tight ${
-          danger ? "text-red-700" : "text-stone-950"
+          alert && value > 0 ? "text-red-600" : "text-stone-950"
         }`}
       >
         {value}
@@ -597,59 +738,52 @@ function MiniStat({
   );
 }
 
-function AmountBlock({
-  label,
-  value,
-  danger,
-}: {
-  label: string;
-  value: number;
-  danger?: boolean;
-}) {
-  return (
-    <div>
-      <p className="text-xs font-bold text-stone-500">{label}</p>
-      <p
-        className={`mt-1 text-sm font-black ${
-          danger ? "text-red-700" : "text-stone-900"
-        }`}
-      >
-        ${value.toFixed(2)}
-      </p>
-    </div>
-  );
-}
-
 function StatusBadge({ value }: { value: string }) {
-  const style =
-    value === "completed"
-      ? "bg-emerald-50 text-emerald-700"
-      : value === "cancelled"
-      ? "bg-red-50 text-red-700"
-      : "bg-[#f4efe4] text-[#2b2926]";
+  const styles: Record<string, string> = {
+    new: "bg-stone-100 text-stone-700",
+    booked: "bg-[#f3ead6] text-[#1b1a18]",
+    in_progress: "bg-blue-50 text-blue-700",
+    completed: "bg-emerald-50 text-emerald-700",
+    invoiced: "bg-purple-50 text-purple-700",
+    cancelled: "bg-red-50 text-red-700",
+  };
 
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
+      className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${
+        styles[value] || styles.new
+      }`}
     >
-      {value.replace("_", " ")}
+      {statusLabels[value] || value}
     </span>
   );
 }
 
-function PaymentBadge({ value }: { value: string }) {
-  const style =
-    value === "paid"
-      ? "bg-emerald-50 text-emerald-700"
-      : value === "overdue"
-      ? "bg-red-50 text-red-700"
-      : "bg-stone-100 text-stone-600";
+function PriorityBadge({ value }: { value: string }) {
+  const styles: Record<string, string> = {
+    low: "bg-stone-100 text-stone-600",
+    medium: "bg-blue-50 text-blue-700",
+    high: "bg-orange-50 text-orange-700",
+    urgent: "bg-red-50 text-red-700",
+  };
 
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-wide ${style}`}
+      className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${
+        styles[value] || styles.medium
+      }`}
     >
-      {value.replace("_", " ")}
+      {priorityLabels[value] || value}
     </span>
   );
+}
+
+function getNextStatus(status: string) {
+  const currentIndex = statusSteps.indexOf(status);
+
+  if (currentIndex === -1 || currentIndex === statusSteps.length - 1) {
+    return null;
+  }
+
+  return statusSteps[currentIndex + 1];
 }
