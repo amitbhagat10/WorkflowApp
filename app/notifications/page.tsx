@@ -1,371 +1,704 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import {
+  Bell,
+  CalendarDays,
+  CheckCircle2,
+  Clock,
+  Mail,
+  MessageSquare,
+  Phone,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  StickyNote,
+  UserRound,
+  Wrench,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
-import type { Job } from "@/types/app";
 
-type NotificationLog = {
+type ClientOption = {
   id: string;
-  notification_type: string;
-  channel: string;
-  recipient: string | null;
-  message: string;
-  sent_status: string;
-  sent_at: string | null;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
+};
+
+type JobOption = {
+  id: string;
+  client_id: string | null;
+  job_number: string | null;
+  title: string;
+  status: string | null;
+  assigned_to: string | null;
+  appointment_start: string | null;
+};
+
+type MessageRecord = {
+  id: string;
+  workspace_id: string | null;
+  client_id: string | null;
+  job_id: string | null;
+  channel: string | null;
+  direction: string | null;
+  subject: string | null;
+  message: string | null;
+  status: string | null;
+  follow_up_at: string | null;
   created_at: string;
+  created_by: string | null;
+};
+
+const channelLabels: Record<string, string> = {
+  sms: "SMS",
+  email: "Email",
+  phone: "Phone",
+  note: "Note",
+};
+
+const statusLabels: Record<string, string> = {
+  draft: "Draft",
+  sent: "Sent",
+  follow_up: "Follow Up",
+  completed: "Completed",
 };
 
 export default function NotificationsPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [logs, setLogs] = useState<NotificationLog[]>([]);
-  const [message, setMessage] = useState("");
+  const [messages, setMessages] = useState<MessageRecord[]>([]);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [messageText, setMessageText] = useState("");
+  const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [channelFilter, setChannelFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [form, setForm] = useState({
+    client_id: "",
+    job_id: "",
+    channel: "note",
+    direction: "outbound",
+    subject: "",
+    message: "",
+    status: "draft",
+    follow_up_at: "",
+  });
 
   useEffect(() => {
     loadData();
   }, []);
 
   async function loadData() {
-    setMessage("");
+    setMessageText("");
+
+    const clientsResult = await supabase
+      .from("clients")
+      .select("id, name, phone, email, address")
+      .order("name");
+
+    if (!clientsResult.error) {
+      setClients((clientsResult.data || []) as unknown as ClientOption[]);
+    }
 
     const jobsResult = await supabase
       .from("jobs")
-      .select(
-        `
-        *,
-        clients (
-          name,
-          phone,
-          address,
-          email
-        )
-      `
-      )
-      .order("appointment_start", { ascending: true });
+      .select("id, client_id, job_number, title, status, assigned_to, appointment_start")
+      .order("created_at", { ascending: false });
 
-    if (jobsResult.error) {
-      setMessage(jobsResult.error.message);
+    if (!jobsResult.error) {
+      setJobs((jobsResult.data || []) as unknown as JobOption[]);
+    }
+
+    const messagesResult = await supabase
+      .from("notifications")
+      .select(
+        "id, workspace_id, client_id, job_id, channel, direction, subject, message, status, follow_up_at, created_at, created_by"
+      )
+      .order("created_at", { ascending: false });
+
+    if (messagesResult.error) {
+      setMessageText(messagesResult.error.message);
       return;
     }
 
-    if (jobsResult.data) {
-      setJobs(jobsResult.data as Job[]);
+    setMessages((messagesResult.data || []) as unknown as MessageRecord[]);
+  }
+
+  async function createMessage(e: React.FormEvent) {
+    e.preventDefault();
+    setMessageText("");
+
+    if (!form.subject.trim()) {
+      setMessageText("Subject is required.");
+      return;
     }
 
-    const logsResult = await supabase
-      .from("notifications")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(10);
-
-    if (logsResult.data) {
-      setLogs(logsResult.data as NotificationLog[]);
-    }
-  }
-
-  const upcomingJobs = useMemo(() => {
-    const now = new Date();
-
-    return jobs.filter((job) => {
-      if (!job.appointment_start) return false;
-      if (job.status === "cancelled") return false;
-
-      const appointmentDate = new Date(job.appointment_start);
-      return appointmentDate >= now;
-    });
-  }, [jobs]);
-
-  const outstandingJobs = useMemo(() => {
-    return jobs.filter((job) => Number(job.amount_outstanding || 0) > 0);
-  }, [jobs]);
-
-  function cleanPhone(phone?: string | null) {
-    if (!phone) return "";
-
-    let digits = phone.replace(/\D/g, "");
-
-    if (digits.startsWith("0")) {
-      digits = "61" + digits.slice(1);
+    if (!form.message.trim()) {
+      setMessageText("Message note is required.");
+      return;
     }
 
-    return digits;
-  }
+    const workspaceResult = await supabase.rpc("current_user_workspace_id");
 
-  function appointmentMessage(job: Job) {
-    const appointmentTime = job.appointment_start
-      ? new Date(job.appointment_start).toLocaleString()
-      : "the scheduled time";
+    if (workspaceResult.error || !workspaceResult.data) {
+      setMessageText("Could not find your workspace. Please logout and login again.");
+      return;
+    }
 
-    return `Hi ${job.clients?.name || ""}, this is a reminder for your handyman appointment for "${job.title}" on ${appointmentTime}. Address: ${
-      job.clients?.address || "your property"
-    }. Please reply if you need to reschedule.`;
-  }
+    const userResult = await supabase.auth.getUser();
+    const email = userResult.data.user?.email || null;
 
-  function paymentMessage(job: Job) {
-    return `Hi ${job.clients?.name || ""}, this is a friendly reminder that there is an outstanding payment of $${Number(
-      job.amount_outstanding || 0
-    ).toFixed(2)} for "${job.title}". Thank you.`;
-  }
-
-  async function saveNotificationLog(
-    job: Job,
-    notificationType: string,
-    channel: string,
-    recipient: string,
-    text: string
-  ) {
     const { error } = await supabase.from("notifications").insert({
-      client_id: job.client_id,
-      job_id: job.id,
-      notification_type: notificationType,
-      channel,
-      recipient,
-      message: text,
-      sent_status: "drafted",
+      workspace_id: workspaceResult.data,
+      client_id: form.client_id || null,
+      job_id: form.job_id || null,
+      channel: form.channel,
+      direction: form.direction,
+      subject: form.subject.trim(),
+      message: form.message.trim(),
+      status: form.status,
+      follow_up_at: form.follow_up_at || null,
+      created_by: email,
     });
 
     if (error) {
-      setMessage(error.message);
+      setMessageText(error.message);
+      return;
+    }
+
+    setForm({
+      client_id: "",
+      job_id: "",
+      channel: "note",
+      direction: "outbound",
+      subject: "",
+      message: "",
+      status: "draft",
+      follow_up_at: "",
+    });
+
+    setShowForm(false);
+    setMessageText("Message note created successfully.");
+    loadData();
+  }
+
+  async function updateStatus(id: string, status: string) {
+    setMessageText("");
+
+    const { error } = await supabase
+      .from("notifications")
+      .update({ status })
+      .eq("id", id);
+
+    if (error) {
+      setMessageText(error.message);
       return;
     }
 
     loadData();
   }
 
-  async function sendWhatsApp(job: Job, notificationType: string, text: string) {
-    const phone = cleanPhone(job.clients?.phone);
+  function handleJobChange(jobId: string) {
+    const selectedJob = jobs.find((job) => job.id === jobId);
 
-    if (!phone) {
-      setMessage("Client phone number is missing.");
-      return;
-    }
-
-    await saveNotificationLog(job, notificationType, "whatsapp", phone, text);
-
-    const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
+    setForm({
+      ...form,
+      job_id: jobId,
+      client_id: selectedJob?.client_id || form.client_id,
+    });
   }
 
-  async function sendSms(job: Job, notificationType: string, text: string) {
-    const phone = job.clients?.phone;
+  const clientMap = useMemo(() => {
+    return new Map(clients.map((client) => [client.id, client]));
+  }, [clients]);
 
-    if (!phone) {
-      setMessage("Client phone number is missing.");
-      return;
-    }
+  const jobMap = useMemo(() => {
+    return new Map(jobs.map((job) => [job.id, job]));
+  }, [jobs]);
 
-    await saveNotificationLog(job, notificationType, "sms", phone, text);
+  const stats = useMemo(() => {
+    return {
+      total: messages.length,
+      followUps: messages.filter((item) => item.status === "follow_up").length,
+      sent: messages.filter((item) => item.status === "sent").length,
+      notes: messages.filter((item) => item.channel === "note").length,
+    };
+  }, [messages]);
 
-    const url = `sms:${phone}?&body=${encodeURIComponent(text)}`;
-    window.open(url, "_blank");
-  }
+  const filteredMessages = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
 
-  async function sendEmail(job: Job, notificationType: string, text: string) {
-    const email = job.clients?.email;
+    return messages.filter((item) => {
+      const client = item.client_id ? clientMap.get(item.client_id) : null;
+      const job = item.job_id ? jobMap.get(item.job_id) : null;
 
-    if (!email) {
-      setMessage("Client email address is missing.");
-      return;
-    }
+      const matchesChannel =
+        channelFilter === "all" || item.channel === channelFilter;
 
-    await saveNotificationLog(job, notificationType, "email", email, text);
+      const matchesStatus =
+        statusFilter === "all" || item.status === statusFilter;
 
-    const subject =
-      notificationType === "appointment_reminder"
-        ? "Appointment Reminder"
-        : "Payment Reminder";
+      const matchesSearch =
+        !search ||
+        (item.subject || "").toLowerCase().includes(search) ||
+        (item.message || "").toLowerCase().includes(search) ||
+        (client?.name || "").toLowerCase().includes(search) ||
+        (job?.title || "").toLowerCase().includes(search) ||
+        (job?.job_number || "").toLowerCase().includes(search);
 
-    const url = `mailto:${email}?subject=${encodeURIComponent(
-      subject
-    )}&body=${encodeURIComponent(text)}`;
-
-    window.open(url, "_blank");
-  }
+      return matchesChannel && matchesStatus && matchesSearch;
+    });
+  }, [messages, searchTerm, channelFilter, statusFilter, clientMap, jobMap]);
 
   return (
-    <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold">Notifications</h1>
-        <p className="text-gray-500">
-          Send appointment reminders and outstanding payment reminders to
-          clients.
-        </p>
+    <div className="space-y-8">
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
+            Communication Centre
+          </p>
+
+          <h1 className="page-title">Messages</h1>
+
+          <p className="page-subtitle">
+            Log customer calls, SMS, emails, notes and follow-up actions.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <button onClick={loadData} className="btn-secondary">
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowForm((current) => !current)}
+            className="btn-primary"
+          >
+            <Plus size={16} />
+            {showForm ? "Close" : "New Message"}
+          </button>
+        </div>
       </div>
 
-      {message && (
-        <div className="mb-5 rounded-xl bg-blue-50 p-4 text-sm text-blue-700">
-          {message}
+      {messageText && (
+        <div className="rounded-2xl border border-stone-200 bg-white/90 p-4 text-sm font-semibold text-stone-700 shadow-sm">
+          {messageText}
         </div>
       )}
 
-      <div className="grid gap-6 xl:grid-cols-2">
-        <div className="card">
-          <h2 className="mb-4 text-xl font-bold">Upcoming Appointment Reminders</h2>
+      <section className="grid gap-4 md:grid-cols-4">
+        <MiniStat title="Messages" value={stats.total} icon={<MessageSquare size={18} />} />
+        <MiniStat title="Follow Ups" value={stats.followUps} icon={<Clock size={18} />} alert={stats.followUps > 0} />
+        <MiniStat title="Sent" value={stats.sent} icon={<CheckCircle2 size={18} />} />
+        <MiniStat title="Notes" value={stats.notes} icon={<StickyNote size={18} />} />
+      </section>
 
-          <div className="space-y-3">
-            {upcomingJobs.map((job) => {
-              const text = appointmentMessage(job);
+      {showForm && (
+        <section className="card">
+          <div className="mb-6">
+            <h2 className="text-2xl font-black tracking-tight text-stone-950">
+              New Communication Note
+            </h2>
 
-              return (
-                <div
-                  key={job.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-                >
-                  <h3 className="font-semibold">{job.title}</h3>
-
-                  <p className="text-sm text-gray-500">
-                    {job.clients?.name} · {job.clients?.phone || "No phone"}
-                  </p>
-
-                  <p className="text-sm text-gray-500">
-                    {job.appointment_start
-                      ? new Date(job.appointment_start).toLocaleString()
-                      : "No appointment date"}
-                  </p>
-
-                  <p className="mt-3 rounded-xl bg-white p-3 text-sm text-gray-600">
-                    {text}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() =>
-                        sendWhatsApp(job, "appointment_reminder", text)
-                      }
-                      className="btn-primary"
-                    >
-                      WhatsApp
-                    </button>
-
-                    <button
-                      onClick={() => sendSms(job, "appointment_reminder", text)}
-                      className="btn-secondary"
-                    >
-                      SMS
-                    </button>
-
-                    <button
-                      onClick={() =>
-                        sendEmail(job, "appointment_reminder", text)
-                      }
-                      className="btn-secondary"
-                    >
-                      Email
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {upcomingJobs.length === 0 && (
-              <p className="text-sm text-gray-500">
-                No upcoming appointments found.
-              </p>
-            )}
+            <p className="mt-1 text-sm font-semibold text-stone-500">
+              Record a customer interaction and link it to a client or work order.
+            </p>
           </div>
-        </div>
 
-        <div className="card">
-          <h2 className="mb-4 text-xl font-bold">Outstanding Payment Reminders</h2>
-
-          <div className="space-y-3">
-            {outstandingJobs.map((job) => {
-              const text = paymentMessage(job);
-
-              return (
-                <div
-                  key={job.id}
-                  className="rounded-xl border border-gray-100 bg-gray-50 p-4"
+          <form onSubmit={createMessage} className="grid gap-5">
+            <div className="grid gap-5 md:grid-cols-2">
+              <div>
+                <label className="label">Client</label>
+                <select
+                  className="input"
+                  value={form.client_id}
+                  onChange={(e) => setForm({ ...form, client_id: e.target.value })}
                 >
-                  <h3 className="font-semibold">{job.title}</h3>
-
-                  <p className="text-sm text-gray-500">
-                    {job.clients?.name} · {job.clients?.phone || "No phone"}
-                  </p>
-
-                  <p className="text-sm text-gray-500">
-                    Outstanding: $
-                    {Number(job.amount_outstanding || 0).toFixed(2)}
-                  </p>
-
-                  <p className="mt-3 rounded-xl bg-white p-3 text-sm text-gray-600">
-                    {text}
-                  </p>
-
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button
-                      onClick={() =>
-                        sendWhatsApp(job, "payment_reminder", text)
-                      }
-                      className="btn-primary"
-                    >
-                      WhatsApp
-                    </button>
-
-                    <button
-                      onClick={() => sendSms(job, "payment_reminder", text)}
-                      className="btn-secondary"
-                    >
-                      SMS
-                    </button>
-
-                    <button
-                      onClick={() => sendEmail(job, "payment_reminder", text)}
-                      className="btn-secondary"
-                    >
-                      Email
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-
-            {outstandingJobs.length === 0 && (
-              <p className="text-sm text-gray-500">
-                No outstanding payments found.
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="card mt-8">
-        <h2 className="mb-4 text-xl font-bold">Recent Notification Logs</h2>
-
-        <div className="space-y-3">
-          {logs.map((log) => (
-            <div
-              key={log.id}
-              className="rounded-xl border border-gray-100 bg-gray-50 p-4"
-            >
-              <div className="flex flex-col justify-between gap-2 md:flex-row">
-                <div>
-                  <p className="font-semibold">
-                    {log.notification_type.replace("_", " ")} · {log.channel}
-                  </p>
-
-                  <p className="text-sm text-gray-500">
-                    Recipient: {log.recipient || "Not available"}
-                  </p>
-                </div>
-
-                <p className="text-sm text-gray-500">
-                  {log.created_at
-                    ? new Date(log.created_at).toLocaleString()
-                    : ""}
-                </p>
+                  <option value="">No client selected</option>
+                  {clients.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <p className="mt-2 text-sm text-gray-600">{log.message}</p>
+              <div>
+                <label className="label">Related Work Order</label>
+                <select
+                  className="input"
+                  value={form.job_id}
+                  onChange={(e) => handleJobChange(e.target.value)}
+                >
+                  <option value="">No work order selected</option>
+                  {jobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.job_number || "Work Order"} — {job.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          ))}
 
-          {logs.length === 0 && (
-            <p className="text-sm text-gray-500">
-              No notification logs yet.
+            <div className="grid gap-5 md:grid-cols-4">
+              <div>
+                <label className="label">Channel</label>
+                <select
+                  className="input"
+                  value={form.channel}
+                  onChange={(e) => setForm({ ...form, channel: e.target.value })}
+                >
+                  <option value="note">Note</option>
+                  <option value="phone">Phone</option>
+                  <option value="sms">SMS</option>
+                  <option value="email">Email</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Direction</label>
+                <select
+                  className="input"
+                  value={form.direction}
+                  onChange={(e) => setForm({ ...form, direction: e.target.value })}
+                >
+                  <option value="outbound">Outbound</option>
+                  <option value="inbound">Inbound</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Status</label>
+                <select
+                  className="input"
+                  value={form.status}
+                  onChange={(e) => setForm({ ...form, status: e.target.value })}
+                >
+                  <option value="draft">Draft</option>
+                  <option value="sent">Sent</option>
+                  <option value="follow_up">Follow Up</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Follow Up</label>
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={form.follow_up_at}
+                  onChange={(e) =>
+                    setForm({ ...form, follow_up_at: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="label">Subject</label>
+              <input
+                className="input"
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                placeholder="Example: Customer requested appointment change"
+              />
+            </div>
+
+            <div>
+              <label className="label">Message / Notes</label>
+              <textarea
+                className="input min-h-32"
+                value={form.message}
+                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                placeholder="Record the call summary, SMS/email note, or follow-up requirement..."
+              />
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <button type="submit" className="btn-primary">
+                <Save size={16} />
+                Save Message
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="card">
+        <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-stone-950">
+              Communication Log
+            </h2>
+
+            <p className="mt-1 text-sm font-semibold text-stone-500">
+              Search and filter customer communication history.
             </p>
-          )}
+          </div>
+
+          <div className="flex flex-col gap-3 lg:flex-row">
+            <div className="flex items-center gap-3 rounded-[1.25rem] border border-stone-200 bg-white px-4 py-3 shadow-sm">
+              <Search size={18} className="text-stone-400" />
+
+              <input
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Search messages..."
+                className="w-full min-w-60 border-0 bg-transparent text-sm font-bold text-stone-800 outline-none placeholder:text-stone-400"
+              />
+            </div>
+
+            <select
+              className="input min-w-40"
+              value={channelFilter}
+              onChange={(e) => setChannelFilter(e.target.value)}
+            >
+              <option value="all">All channels</option>
+              <option value="note">Note</option>
+              <option value="phone">Phone</option>
+              <option value="sms">SMS</option>
+              <option value="email">Email</option>
+            </select>
+
+            <select
+              className="input min-w-40"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All statuses</option>
+              <option value="draft">Draft</option>
+              <option value="sent">Sent</option>
+              <option value="follow_up">Follow Up</option>
+              <option value="completed">Completed</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {filteredMessages.map((item) => (
+            <MessageCard
+              key={item.id}
+              item={item}
+              client={item.client_id ? clientMap.get(item.client_id) : null}
+              job={item.job_id ? jobMap.get(item.job_id) : null}
+              updateStatus={updateStatus}
+            />
+          ))}
+        </div>
+
+        {filteredMessages.length === 0 && (
+          <div className="rounded-[1.5rem] border border-dashed border-stone-300 bg-stone-50/80 p-10 text-center">
+            <Bell className="mx-auto text-stone-400" size={30} />
+
+            <h3 className="mt-4 text-2xl font-black text-stone-950">
+              No messages found
+            </h3>
+
+            <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-stone-500">
+              Create your first communication note or change the filters.
+            </p>
+
+            <button onClick={() => setShowForm(true)} className="btn-primary mt-5">
+              New Message
+            </button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function MessageCard({
+  item,
+  client,
+  job,
+  updateStatus,
+}: {
+  item: MessageRecord;
+  client: ClientOption | null | undefined;
+  job: JobOption | null | undefined;
+  updateStatus: (id: string, status: string) => void;
+}) {
+  return (
+    <div className="rounded-[1.5rem] border border-stone-200 bg-white/90 p-5 shadow-sm transition hover:border-stone-300 hover:shadow-md">
+      <div className="grid gap-5 xl:grid-cols-[1fr_280px] xl:items-center">
+        <div>
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <ChannelBadge value={item.channel || "note"} />
+            <StatusBadge value={item.status || "draft"} />
+
+            <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-stone-600">
+              {item.direction || "outbound"}
+            </span>
+          </div>
+
+          <h3 className="text-xl font-black tracking-tight text-stone-950">
+            {item.subject || "Communication note"}
+          </h3>
+
+          <p className="mt-2 line-clamp-3 text-sm font-semibold leading-relaxed text-stone-500">
+            {item.message || "No message content."}
+          </p>
+
+          <div className="mt-4 grid gap-2 text-sm font-semibold text-stone-500 md:grid-cols-2">
+            <p className="flex items-center gap-2">
+              <UserRound size={15} />
+              {client?.name || "No client linked"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <Wrench size={15} />
+              {job?.title || "No work order linked"}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <CalendarDays size={15} />
+              Created {new Date(item.created_at).toLocaleString()}
+            </p>
+
+            <p className="flex items-center gap-2">
+              <Clock size={15} />
+              {item.follow_up_at
+                ? `Follow up ${new Date(item.follow_up_at).toLocaleString()}`
+                : "No follow-up set"}
+            </p>
+          </div>
+        </div>
+
+        <div className="rounded-[1.25rem] bg-stone-50 p-4">
+          <div className="grid gap-2">
+            {client?.phone && (
+              <a href={`tel:${client.phone}`} className="btn-secondary">
+                <Phone size={15} />
+                Call
+              </a>
+            )}
+
+            {client?.phone && (
+              <a href={`sms:${client.phone}`} className="btn-secondary">
+                <MessageSquare size={15} />
+                SMS
+              </a>
+            )}
+
+            {client?.email && (
+              <a href={`mailto:${client.email}`} className="btn-secondary">
+                <Mail size={15} />
+                Email
+              </a>
+            )}
+
+            {client && (
+              <Link href={`/clients/${client.id}`} className="btn-secondary">
+                Open Client
+              </Link>
+            )}
+
+            {job && (
+              <Link href={`/jobs/${job.id}`} className="btn-secondary">
+                Open Job
+              </Link>
+            )}
+
+            {item.status !== "completed" && (
+              <button
+                onClick={() => updateStatus(item.id, "completed")}
+                className="btn-primary"
+              >
+                Complete
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function MiniStat({
+  title,
+  value,
+  icon,
+  alert,
+}: {
+  title: string;
+  value: string | number;
+  icon: React.ReactNode;
+  alert?: boolean;
+}) {
+  return (
+    <div className="card">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-stone-500">{title}</p>
+          <p
+            className={`mt-3 text-2xl font-black tracking-tight ${
+              alert ? "text-red-600" : "text-stone-950"
+            }`}
+          >
+            {value}
+          </p>
+        </div>
+
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+            alert ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600"
+          }`}
+        >
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ChannelBadge({ value }: { value: string }) {
+  const styles: Record<string, string> = {
+    note: "bg-stone-100 text-stone-700",
+    phone: "bg-blue-50 text-blue-700",
+    sms: "bg-[#f3ead6] text-[#1b1a18]",
+    email: "bg-purple-50 text-purple-700",
+  };
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${
+        styles[value] || styles.note
+      }`}
+    >
+      {channelLabels[value] || value}
+    </span>
+  );
+}
+
+function StatusBadge({ value }: { value: string }) {
+  const styles: Record<string, string> = {
+    draft: "bg-stone-100 text-stone-700",
+    sent: "bg-emerald-50 text-emerald-700",
+    follow_up: "bg-orange-50 text-orange-700",
+    completed: "bg-blue-50 text-blue-700",
+  };
+
+  return (
+    <span
+      className={`rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-wide ${
+        styles[value] || styles.draft
+      }`}
+    >
+      {statusLabels[value] || value}
+    </span>
   );
 }
