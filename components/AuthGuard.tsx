@@ -34,7 +34,11 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
     let mounted = true;
 
     async function clearLocalSession() {
-      await supabase.auth.signOut({ scope: "global" });
+      try {
+  await supabase.auth.signOut({ scope: "local" });
+} catch {
+  // Ignore stale refresh token errors
+}
 
       if (typeof window !== "undefined") {
         Object.keys(localStorage).forEach((key) => {
@@ -151,7 +155,11 @@ export default function AuthGuard({ children }: { children: ReactNode }) {
   }, [publicRoute, router]);
 
   async function signOut() {
-    await supabase.auth.signOut({ scope: "global" });
+    try {
+  await supabase.auth.signOut({ scope: "local" });
+} catch {
+  // Ignore stale refresh token errors
+}
 
     if (typeof window !== "undefined") {
       Object.keys(localStorage).forEach((key) => {

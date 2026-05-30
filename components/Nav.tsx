@@ -58,7 +58,11 @@ export default function Nav() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut({ scope: "global" });
+   try {
+  await supabase.auth.signOut({ scope: "local" });
+} catch {
+  // Ignore stale refresh token errors
+}
 
     if (typeof window !== "undefined") {
       Object.keys(localStorage).forEach((key) => {
