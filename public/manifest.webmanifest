@@ -1,0 +1,19 @@
+{
+  "name": "WorkFlow Pro",
+  "short_name": "WorkFlow Pro",
+  "description": "Field service operations, work orders, scheduling, payments and invoices.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#faf8f2",
+  "theme_color": "#2b2926",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/workflow-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

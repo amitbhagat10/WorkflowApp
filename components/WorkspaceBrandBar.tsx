@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { CalendarDays, CheckCircle2, ShieldCheck } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import InstallAppButton from "@/components/InstallAppButton";
 
 type WorkspaceBrand = {
   id: string;
@@ -131,6 +132,8 @@ export default function WorkspaceBrandBar() {
               </span>
             </>
           )}
+
+          <InstallAppButton />
         </div>
       </div>
     </section>

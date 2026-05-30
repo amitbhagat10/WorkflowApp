@@ -1,40 +1,58 @@
-import WorkspaceBrandBar from "@/components/WorkspaceBrandBar";
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import Nav from "@/components/Nav";
-import MobileBottomNav from "@/components/MobileBottomNav";
-import MobileTopBar from "@/components/MobileTopBar";
 import AuthGuard from "@/components/AuthGuard";
+import Nav from "@/components/Nav";
+import MobileTopBar from "@/components/MobileTopBar";
+import MobileBottomNav from "@/components/MobileBottomNav";
+import WorkspaceBrandBar from "@/components/WorkspaceBrandBar";
+import PwaRegister from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
   title: "WorkFlow Pro",
-  description: "Field service operations platform",
+  description:
+    "Field service operations, work orders, scheduling, payments and invoices.",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: "/icons/workflow-icon.svg",
+    apple: "/icons/workflow-icon.svg",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "WorkFlow Pro",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2b2926",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
+}: {
   children: React.ReactNode;
-}>) {
+}) {
   return (
     <html lang="en">
-      <body>
-<AuthGuard>
-  <div className="flex min-h-screen w-full overflow-x-hidden">
-    <Nav />
+      <body className="bg-[#faf8f2] text-stone-950">
+        <PwaRegister />
 
-    <MobileTopBar />
+        <AuthGuard>
+          <MobileTopBar />
 
-    <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-28 pt-24 md:p-8">
-      <div className="mx-auto w-full max-w-7xl">
-        <WorkspaceBrandBar />
-        {children}
-      </div>
-    </main>
+          <div className="min-h-screen md:flex">
+            <Nav />
 
-    <MobileBottomNav />
-  </div>
-</AuthGuard>
+            <main className="w-full px-4 pb-28 pt-24 md:ml-72 md:px-8 md:py-8">
+              <WorkspaceBrandBar />
+              {children}
+            </main>
+          </div>
+
+          <MobileBottomNav />
+        </AuthGuard>
       </body>
     </html>
   );
