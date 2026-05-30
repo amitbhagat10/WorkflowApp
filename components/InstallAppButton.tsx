@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Smartphone } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -12,27 +13,38 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 export default function InstallAppButton() {
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [deferredPrompt, setDeferredPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isStandalone, setIsStandalone] = useState(false);
-  const [showHelp, setShowHelp] = useState(false);
 
   useEffect(() => {
     const standalone =
       window.matchMedia("(display-mode: standalone)").matches ||
-      Boolean((window.navigator as Navigator & { standalone?: boolean }).standalone);
+      Boolean(
+        (window.navigator as Navigator & { standalone?: boolean }).standalone
+      );
 
     setIsStandalone(standalone);
 
-    const handler = (event: Event) => {
+    const installHandler = (event: Event) => {
       event.preventDefault();
       setDeferredPrompt(event as BeforeInstallPromptEvent);
     };
 
-    window.addEventListener("beforeinstallprompt", handler);
+    const installedHandler = () => {
+      setIsStandalone(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", installHandler);
+    window.addEventListener("appinstalled", installedHandler);
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("beforeinstallprompt", installHandler);
+      window.removeEventListener("appinstalled", installedHandler);
     };
   }, []);
 
@@ -44,43 +56,21 @@ export default function InstallAppButton() {
       return;
     }
 
-    setShowHelp((current) => !current);
+    router.push("/install");
   }
 
-  if (isStandalone) {
+  if (isStandalone || pathname.startsWith("/install")) {
     return null;
   }
 
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={handleInstall}
-        className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3.5 py-2 text-[11px] font-black uppercase tracking-wide text-stone-600 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
-      >
-        <Smartphone size={14} />
-        Install App
-      </button>
-
-      {showHelp && (
-        <div className="absolute right-0 z-50 mt-3 w-72 rounded-2xl border border-stone-200 bg-white p-4 text-left shadow-xl shadow-stone-900/10">
-          <p className="text-sm font-black text-stone-900">
-            Install on your phone
-          </p>
-
-          <div className="mt-3 space-y-2 text-xs font-semibold leading-relaxed text-stone-500">
-            <p>
-              <span className="font-black text-stone-700">iPhone:</span> open in
-              Safari, tap Share, then Add to Home Screen.
-            </p>
-
-            <p>
-              <span className="font-black text-stone-700">Android:</span> open in
-              Chrome, tap the menu, then Install app or Add to Home screen.
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={handleInstall}
+      className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3.5 py-2 text-[11px] font-black uppercase tracking-wide text-stone-600 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
+    >
+      <Smartphone size={14} />
+      Install App
+    </button>
   );
 }
