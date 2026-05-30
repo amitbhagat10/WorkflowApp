@@ -7,12 +7,9 @@ import {
   ArrowRight,
   CalendarDays,
   CheckCircle2,
-  Clock,
   CreditCard,
-  FileText,
   Plus,
   RefreshCw,
-  UserRound,
   Users,
   Wrench,
 } from "lucide-react";
@@ -42,19 +39,9 @@ type JobRecord = {
   clients?: ClientInfo | null;
 };
 
-type PaymentRecord = {
-  id: string;
-  amount: number;
-  payment_method: string | null;
-  payment_date: string | null;
-  notes: string | null;
-  created_at: string;
-};
-
 type ClientRecord = {
   id: string;
   name: string;
-  created_at: string;
 };
 
 const statusLabels: Record<string, string> = {
@@ -69,7 +56,6 @@ const statusLabels: Record<string, string> = {
 export default function HomePage() {
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -115,21 +101,11 @@ export default function HomePage() {
 
     const clientsResult = await supabase
       .from("clients")
-      .select("id, name, created_at")
-      .order("created_at", { ascending: false });
+      .select("id, name")
+      .order("name");
 
     if (!clientsResult.error) {
       setClients((clientsResult.data || []) as unknown as ClientRecord[]);
-    }
-
-    const paymentsResult = await supabase
-      .from("payments")
-      .select("id, amount, payment_method, payment_date, notes, created_at")
-      .order("created_at", { ascending: false })
-      .limit(8);
-
-    if (!paymentsResult.error) {
-      setPayments((paymentsResult.data || []) as unknown as PaymentRecord[]);
     }
   }
 
@@ -158,7 +134,6 @@ export default function HomePage() {
 
     return {
       clients: clients.length,
-      totalJobs: jobs.length,
       activeJobs: activeJobs.length,
       todayJobs: todayJobs.length,
       overdueJobs: overdueJobs.length,
@@ -167,22 +142,22 @@ export default function HomePage() {
         (sum, job) => sum + Number(job.amount_outstanding || 0),
         0
       ),
-      totalValue: jobs.reduce((sum, job) => sum + Number(job.total_amount || 0), 0),
-      paid: jobs.reduce((sum, job) => sum + Number(job.amount_paid || 0), 0),
     };
   }, [jobs, clients, today]);
 
-  const upcomingJobs = useMemo(() => {
+  const todayJobs = useMemo(() => {
     return jobs
-      .filter((job) => job.appointment_start)
-      .filter((job) => !["completed", "invoiced", "cancelled"].includes(job.status || ""))
+      .filter((job) => {
+        if (!job.appointment_start) return false;
+        return formatDateInput(new Date(job.appointment_start)) === today;
+      })
       .sort(
         (a, b) =>
           new Date(a.appointment_start || "").getTime() -
           new Date(b.appointment_start || "").getTime()
       )
       .slice(0, 5);
-  }, [jobs]);
+  }, [jobs, today]);
 
   const attentionJobs = useMemo(() => {
     return jobs
@@ -192,29 +167,14 @@ export default function HomePage() {
           !["completed", "invoiced", "cancelled"].includes(job.status || "") &&
           new Date(job.due_date) < new Date(today + "T00:00:00");
 
-        return overdue || job.priority === "urgent" || Number(job.amount_outstanding || 0) > 0;
+        return (
+          overdue ||
+          job.priority === "urgent" ||
+          Number(job.amount_outstanding || 0) > 0
+        );
       })
       .slice(0, 5);
   }, [jobs, today]);
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = {
-      new: 0,
-      booked: 0,
-      in_progress: 0,
-      completed: 0,
-      invoiced: 0,
-    };
-
-    jobs.forEach((job) => {
-      const status = job.status || "new";
-      if (counts[status] !== undefined) {
-        counts[status] += 1;
-      }
-    });
-
-    return counts;
-  }, [jobs]);
 
   return (
     <div className="space-y-8">
@@ -227,7 +187,7 @@ export default function HomePage() {
           <h1 className="page-title">Dashboard</h1>
 
           <p className="page-subtitle">
-            Real-time view of clients, work orders, schedule, payments and operational risk.
+            A clean command centre for today’s work, urgent jobs and outstanding balances.
           </p>
         </div>
 
@@ -252,9 +212,9 @@ export default function HomePage() {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <HeroStat
-          title="Today’s Jobs"
+          title="Today"
           value={stats.todayJobs}
-          subtitle="Scheduled for today"
+          subtitle="Jobs scheduled today"
           icon={<CalendarDays size={22} />}
           href="/calendar"
         />
@@ -262,7 +222,7 @@ export default function HomePage() {
         <HeroStat
           title="Active Work"
           value={stats.activeJobs}
-          subtitle="New, booked or in progress"
+          subtitle="Open work orders"
           icon={<Wrench size={22} />}
           href="/jobs"
         />
@@ -270,105 +230,51 @@ export default function HomePage() {
         <HeroStat
           title="Outstanding"
           value={`$${stats.outstanding.toFixed(2)}`}
-          subtitle="Unpaid job balance"
+          subtitle="Balance to collect"
           icon={<CreditCard size={22} />}
           href="/payments"
           alert={stats.outstanding > 0}
         />
 
         <HeroStat
-          title="Needs Attention"
-          value={stats.overdueJobs + stats.urgentJobs}
-          subtitle="Overdue or urgent jobs"
-          icon={<AlertTriangle size={22} />}
-          href="/jobs"
-          alert={stats.overdueJobs + stats.urgentJobs > 0}
+          title="Clients"
+          value={stats.clients}
+          subtitle="Customer records"
+          icon={<Users size={22} />}
+          href="/clients"
         />
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MiniStat title="Clients" value={stats.clients} icon={<Users size={18} />} />
-        <MiniStat title="Total Jobs" value={stats.totalJobs} icon={<FileText size={18} />} />
-        <MiniStat title="Paid" value={`$${stats.paid.toFixed(0)}`} icon={<CheckCircle2 size={18} />} />
-        <MiniStat title="Job Value" value={`$${stats.totalValue.toFixed(0)}`} icon={<CreditCard size={18} />} />
-      </section>
-
-      <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <div className="space-y-6">
-          <div className="card">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-stone-950">
-                  Job Pipeline
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-stone-500">
-                  Work orders across the lifecycle.
-                </p>
-              </div>
-
-              <Link href="/jobs" className="btn-secondary">
-                View All
-              </Link>
+      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="card">
+          <div className="mb-6 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-stone-950">
+                Today’s Dispatch
+              </h2>
+              <p className="mt-1 text-sm font-semibold text-stone-500">
+                Jobs scheduled for today.
+              </p>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-5">
-              {Object.entries(statusCounts).map(([status, count]) => (
-                <div
-                  key={status}
-                  className="rounded-[1.25rem] border border-stone-200 bg-white/85 p-4"
-                >
-                  <p className="text-xs font-black uppercase tracking-wide text-stone-400">
-                    {statusLabels[status]}
-                  </p>
-
-                  <p className="mt-3 text-3xl font-black text-stone-950">
-                    {count}
-                  </p>
-
-                  <div className="mt-3 h-2 rounded-full bg-stone-100">
-                    <div
-                      className="h-2 rounded-full bg-[#1b1a18]"
-                      style={{
-                        width: `${jobs.length ? Math.min((count / jobs.length) * 100, 100) : 0}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
+            <Link href="/calendar" className="btn-secondary">
+              Schedule
+            </Link>
           </div>
 
-          <div className="card">
-            <div className="mb-6 flex items-center justify-between gap-4">
-              <div>
-                <h2 className="text-2xl font-black tracking-tight text-stone-950">
-                  Upcoming Schedule
-                </h2>
-                <p className="mt-1 text-sm font-semibold text-stone-500">
-                  Next booked appointments.
-                </p>
-              </div>
+          <div className="space-y-3">
+            {todayJobs.map((job) => (
+              <JobRow key={job.id} job={job} />
+            ))}
 
-              <Link href="/calendar" className="btn-secondary">
-                Schedule
-              </Link>
-            </div>
-
-            <div className="space-y-3">
-              {upcomingJobs.map((job) => (
-                <DashboardJobRow key={job.id} job={job} />
-              ))}
-
-              {upcomingJobs.length === 0 && (
-                <EmptyState
-                  icon={<CalendarDays size={24} />}
-                  title="No upcoming jobs"
-                  text="Scheduled appointments will appear here."
-                  href="/jobs"
-                  action="Open Work Orders"
-                />
-              )}
-            </div>
+            {todayJobs.length === 0 && (
+              <EmptyState
+                title="No jobs scheduled today"
+                text="Scheduled appointments will appear here."
+                href="/calendar"
+                action="Open Schedule"
+              />
+            )}
           </div>
         </div>
 
@@ -376,7 +282,7 @@ export default function HomePage() {
           <div className="card">
             <div className="mb-6">
               <h2 className="text-2xl font-black tracking-tight text-stone-950">
-                Attention Queue
+                Needs Attention
               </h2>
               <p className="mt-1 text-sm font-semibold text-stone-500">
                 Urgent, overdue or unpaid work.
@@ -385,7 +291,7 @@ export default function HomePage() {
 
             <div className="space-y-3">
               {attentionJobs.map((job) => (
-                <AttentionJobRow key={job.id} job={job} today={today} />
+                <AttentionRow key={job.id} job={job} today={today} />
               ))}
 
               {attentionJobs.length === 0 && (
@@ -397,7 +303,7 @@ export default function HomePage() {
                         Everything looks healthy
                       </h3>
                       <p className="mt-1 text-sm font-semibold text-emerald-700">
-                        No urgent, overdue or unpaid items requiring immediate attention.
+                        No urgent or overdue work needs attention.
                       </p>
                     </div>
                   </div>
@@ -407,49 +313,30 @@ export default function HomePage() {
           </div>
 
           <div className="card">
-            <div className="mb-6">
-              <h2 className="text-2xl font-black tracking-tight text-stone-950">
-                Recent Payments
-              </h2>
-              <p className="mt-1 text-sm font-semibold text-stone-500">
-                Latest money received.
-              </p>
-            </div>
+            <h2 className="text-2xl font-black tracking-tight text-stone-950">
+              Quick Actions
+            </h2>
 
-            <div className="space-y-3">
-              {payments.map((payment) => (
-                <div
-                  key={payment.id}
-                  className="rounded-[1.2rem] border border-stone-200 bg-white/85 p-4"
-                >
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-lg font-black text-stone-950">
-                        ${Number(payment.amount || 0).toFixed(2)}
-                      </p>
+            <div className="mt-5 grid gap-3">
+              <Link href="/jobs" className="btn-primary">
+                <Plus size={16} />
+                Create Work Order
+              </Link>
 
-                      <p className="mt-1 text-sm font-semibold text-stone-500">
-                        {payment.payment_method || "Payment"} ·{" "}
-                        {payment.payment_date
-                          ? new Date(payment.payment_date).toLocaleDateString()
-                          : new Date(payment.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+              <Link href="/clients" className="btn-secondary">
+                <Users size={16} />
+                Add / View Clients
+              </Link>
 
-                    <CreditCard className="text-stone-400" size={20} />
-                  </div>
-                </div>
-              ))}
+              <Link href="/payments" className="btn-secondary">
+                <CreditCard size={16} />
+                Record Payment
+              </Link>
 
-              {payments.length === 0 && (
-                <EmptyState
-                  icon={<CreditCard size={24} />}
-                  title="No payments yet"
-                  text="Recorded payments will appear here."
-                  href="/payments"
-                  action="Open Payments"
-                />
-              )}
+              <Link href="/invoices" className="btn-secondary">
+                View Invoices
+                <ArrowRight size={16} />
+              </Link>
             </div>
           </div>
         </div>
@@ -476,10 +363,8 @@ function HeroStat({
   return (
     <Link
       href={href}
-      className={`group overflow-hidden rounded-[1.75rem] border p-5 shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl ${
-        alert
-          ? "border-red-200 bg-red-50/95"
-          : "border-white/70 bg-white/95"
+      className={`group rounded-[1.75rem] border p-5 shadow-xl transition hover:-translate-y-0.5 hover:shadow-2xl ${
+        alert ? "border-red-200 bg-red-50/95" : "border-white/70 bg-white/95"
       }`}
     >
       <div className="flex items-start justify-between gap-4">
@@ -511,51 +396,17 @@ function HeroStat({
 
         <div
           className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
-            alert
-              ? "bg-red-100 text-red-700"
-              : "bg-[#1b1a18] text-[#d8bd82]"
+            alert ? "bg-red-100 text-red-700" : "bg-[#1b1a18] text-[#d8bd82]"
           }`}
         >
           {icon}
         </div>
       </div>
-
-      <div className="mt-5 flex items-center gap-2 text-sm font-black text-stone-500 group-hover:text-stone-950">
-        Open
-        <ArrowRight size={15} />
-      </div>
     </Link>
   );
 }
 
-function MiniStat({
-  title,
-  value,
-  icon,
-}: {
-  title: string;
-  value: string | number;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="card">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-bold text-stone-500">{title}</p>
-          <p className="mt-3 text-2xl font-black tracking-tight text-stone-950">
-            {value}
-          </p>
-        </div>
-
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-stone-100 text-stone-600">
-          {icon}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardJobRow({ job }: { job: JobRecord }) {
+function JobRow({ job }: { job: JobRecord }) {
   return (
     <Link
       href={`/jobs/${job.id}`}
@@ -578,8 +429,11 @@ function DashboardJobRow({ job }: { job: JobRecord }) {
           <p className="mt-1 text-sm font-semibold text-stone-500">
             {job.clients?.name || "No client"} ·{" "}
             {job.appointment_start
-              ? new Date(job.appointment_start).toLocaleString()
-              : "No appointment"}
+              ? new Date(job.appointment_start).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "No time"}
           </p>
         </div>
 
@@ -589,7 +443,7 @@ function DashboardJobRow({ job }: { job: JobRecord }) {
   );
 }
 
-function AttentionJobRow({ job, today }: { job: JobRecord; today: string }) {
+function AttentionRow({ job, today }: { job: JobRecord; today: string }) {
   const overdue =
     job.due_date &&
     !["completed", "invoiced", "cancelled"].includes(job.status || "") &&
@@ -632,13 +486,11 @@ function AttentionJobRow({ job, today }: { job: JobRecord; today: string }) {
 }
 
 function EmptyState({
-  icon,
   title,
   text,
   href,
   action,
 }: {
-  icon: React.ReactNode;
   title: string;
   text: string;
   href: string;
@@ -646,9 +498,7 @@ function EmptyState({
 }) {
   return (
     <div className="rounded-[1.5rem] border border-dashed border-stone-300 bg-stone-50/80 p-8 text-center">
-      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3ead6] text-[#1b1a18]">
-        {icon}
-      </div>
+      <CalendarDays className="mx-auto text-stone-400" size={28} />
 
       <h3 className="mt-4 text-xl font-black text-stone-950">{title}</h3>
 
@@ -685,5 +535,9 @@ function StatusBadge({ value }: { value: string }) {
 }
 
 function formatDateInput(date: Date) {
-  return date.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
 }
