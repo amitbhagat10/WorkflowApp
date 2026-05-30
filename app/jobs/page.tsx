@@ -1,11 +1,14 @@
 "use client";
-import TechnicianSelect from "@/components/TechnicianSelect";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  ArrowRight,
   CalendarDays,
   CheckCircle2,
   Clock,
+  CreditCard,
   MapPin,
   Plus,
   RefreshCw,
@@ -14,19 +17,20 @@ import {
   Wrench,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import TechnicianSelect from "@/components/TechnicianSelect";
 
 type ClientOption = {
   id: string;
   name: string;
   phone: string | null;
+  email: string | null;
   address: string | null;
 };
 
 type JobRecord = {
   id: string;
-  workspace_id?: string | null;
-  client_id: string | null;
   job_number: string | null;
+  client_id: string | null;
   title: string;
   description: string | null;
   job_type: string | null;
@@ -34,8 +38,8 @@ type JobRecord = {
   payment_status: string | null;
   priority: string | null;
   assigned_to: string | null;
-  due_date: string | null;
   appointment_start: string | null;
+  due_date: string | null;
   labour_cost: number | null;
   material_cost: number | null;
   total_amount: number | null;
@@ -44,14 +48,6 @@ type JobRecord = {
   created_at: string;
   clients?: ClientOption | null;
 };
-
-const statusSteps = [
-  "new",
-  "booked",
-  "in_progress",
-  "completed",
-  "invoiced",
-];
 
 const statusLabels: Record<string, string> = {
   new: "New",
@@ -75,7 +71,7 @@ export default function JobsPage() {
   const [message, setMessage] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("active");
 
   const [form, setForm] = useState({
     client_id: "",
@@ -100,7 +96,7 @@ export default function JobsPage() {
 
     const clientsResult = await supabase
       .from("clients")
-      .select("id, name, phone, address")
+      .select("id, name, phone, email, address")
       .order("name");
 
     if (!clientsResult.error) {
@@ -112,9 +108,8 @@ export default function JobsPage() {
       .select(
         `
         id,
-        workspace_id,
-        client_id,
         job_number,
+        client_id,
         title,
         description,
         job_type,
@@ -122,8 +117,8 @@ export default function JobsPage() {
         payment_status,
         priority,
         assigned_to,
-        due_date,
         appointment_start,
+        due_date,
         labour_cost,
         material_cost,
         total_amount,
@@ -134,6 +129,7 @@ export default function JobsPage() {
           id,
           name,
           phone,
+          email,
           address
         )
       `
@@ -184,10 +180,10 @@ export default function JobsPage() {
       title: form.title.trim(),
       description: form.description.trim() || null,
       job_type: form.job_type,
-      status: form.status,
+      status: form.appointment_start ? "booked" : form.status,
       payment_status: total > 0 ? "unpaid" : "not_required",
       priority: form.priority,
-      assigned_to: form.assigned_to.trim() || null,
+      assigned_to: form.assigned_to || null,
       appointment_start: form.appointment_start || null,
       due_date: form.due_date || null,
       labour_cost: labour,
@@ -222,14 +218,20 @@ export default function JobsPage() {
   }
 
   async function moveToNextStatus(job: JobRecord) {
-    const current = job.status || "new";
-    const currentIndex = statusSteps.indexOf(current);
+    const currentStatus = job.status || "new";
 
-    if (currentIndex === -1 || currentIndex === statusSteps.length - 1) {
-      return;
-    }
+    const nextStatus =
+      currentStatus === "new"
+        ? "booked"
+        : currentStatus === "booked"
+        ? "in_progress"
+        : currentStatus === "in_progress"
+        ? "completed"
+        : currentStatus === "completed"
+        ? "invoiced"
+        : currentStatus;
 
-    const nextStatus = statusSteps[currentIndex + 1];
+    if (nextStatus === currentStatus) return;
 
     const { error } = await supabase
       .from("jobs")
@@ -245,14 +247,27 @@ export default function JobsPage() {
   }
 
   const stats = useMemo(() => {
+    const activeJobs = jobs.filter((job) =>
+      ["new", "booked", "in_progress"].includes(job.status || "new")
+    );
+
+    const outstanding = jobs.reduce(
+      (sum, job) => sum + Number(job.amount_outstanding || 0),
+      0
+    );
+
+    const urgent = jobs.filter((job) => job.priority === "urgent").length;
+
+    const completed = jobs.filter((job) =>
+      ["completed", "invoiced"].includes(job.status || "")
+    ).length;
+
     return {
       total: jobs.length,
-      active: jobs.filter((job) =>
-        ["new", "booked", "in_progress"].includes(job.status || "new")
-      ).length,
-      completed: jobs.filter((job) => job.status === "completed").length,
-      invoiced: jobs.filter((job) => job.status === "invoiced").length,
-      urgent: jobs.filter((job) => job.priority === "urgent").length,
+      active: activeJobs.length,
+      urgent,
+      completed,
+      outstanding,
     };
   }, [jobs]);
 
@@ -261,7 +276,10 @@ export default function JobsPage() {
 
     return jobs.filter((job) => {
       const matchesStatus =
-        statusFilter === "all" || (job.status || "new") === statusFilter;
+        statusFilter === "all" ||
+        (statusFilter === "active" &&
+          !["completed", "invoiced", "cancelled"].includes(job.status || "")) ||
+        job.status === statusFilter;
 
       const matchesSearch =
         !search ||
@@ -280,11 +298,13 @@ export default function JobsPage() {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
         <div>
           <p className="mb-2 text-xs font-black uppercase tracking-[0.2em] text-stone-500">
-            Work Order Command
+            Work Order Command Centre
           </p>
+
           <h1 className="page-title">Work Orders</h1>
+
           <p className="page-subtitle">
-            Create, schedule, track and progress every job from request to invoice.
+            Create, assign, schedule and track field service jobs.
           </p>
         </div>
 
@@ -311,21 +331,36 @@ export default function JobsPage() {
       )}
 
       <section className="grid gap-4 md:grid-cols-5">
-        <MiniStat title="Total Jobs" value={stats.total} />
-        <MiniStat title="Active" value={stats.active} />
-        <MiniStat title="Completed" value={stats.completed} />
-        <MiniStat title="Invoiced" value={stats.invoiced} />
-        <MiniStat title="Urgent" value={stats.urgent} alert />
+        <MiniStat title="Total Jobs" value={stats.total} icon={<Wrench size={18} />} />
+        <MiniStat title="Active" value={stats.active} icon={<Clock size={18} />} />
+        <MiniStat
+          title="Urgent"
+          value={stats.urgent}
+          icon={<AlertTriangle size={18} />}
+          alert={stats.urgent > 0}
+        />
+        <MiniStat
+          title="Completed"
+          value={stats.completed}
+          icon={<CheckCircle2 size={18} />}
+        />
+        <MiniStat
+          title="Outstanding"
+          value={`$${stats.outstanding.toFixed(2)}`}
+          icon={<CreditCard size={18} />}
+          alert={stats.outstanding > 0}
+        />
       </section>
 
       {showForm && (
         <section className="card">
           <div className="mb-6">
             <h2 className="text-2xl font-black tracking-tight text-stone-950">
-              New Work Order
+              Create Work Order
             </h2>
+
             <p className="mt-1 text-sm font-semibold text-stone-500">
-              Add the job details, priority, schedule and estimated charges.
+              Add the job details, assign a team member and schedule the work.
             </p>
           </div>
 
@@ -336,9 +371,7 @@ export default function JobsPage() {
                 <select
                   className="input"
                   value={form.client_id}
-                  onChange={(e) =>
-                    setForm({ ...form, client_id: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, client_id: e.target.value })}
                 >
                   <option value="">Select client</option>
                   {clients.map((client) => (
@@ -354,9 +387,7 @@ export default function JobsPage() {
                 <select
                   className="input"
                   value={form.job_type}
-                  onChange={(e) =>
-                    setForm({ ...form, job_type: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, job_type: e.target.value })}
                 >
                   <option>General Service</option>
                   <option>Emergency Callout</option>
@@ -370,24 +401,22 @@ export default function JobsPage() {
             </div>
 
             <div>
-              <label className="label">Work Order Title</label>
+              <label className="label">Title</label>
               <input
                 className="input"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Example: Replace leaking kitchen tap"
+                placeholder="Example: Repair leaking tap"
               />
             </div>
 
             <div>
-              <label className="label">Job Notes</label>
+              <label className="label">Description</label>
               <textarea
                 className="input min-h-28"
                 value={form.description}
-                onChange={(e) =>
-                  setForm({ ...form, description: e.target.value })
-                }
-                placeholder="Describe the issue, site instructions, materials required, or customer notes..."
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                placeholder="Job notes, site instructions, access details..."
               />
             </div>
 
@@ -402,6 +431,9 @@ export default function JobsPage() {
                   <option value="new">New</option>
                   <option value="booked">Booked</option>
                   <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                  <option value="invoiced">Invoiced</option>
+                  <option value="cancelled">Cancelled</option>
                 </select>
               </div>
 
@@ -410,9 +442,7 @@ export default function JobsPage() {
                 <select
                   className="input"
                   value={form.priority}
-                  onChange={(e) =>
-                    setForm({ ...form, priority: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, priority: e.target.value })}
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -439,21 +469,18 @@ export default function JobsPage() {
                   className="input"
                   type="date"
                   value={form.due_date}
-                  onChange={(e) =>
-                    setForm({ ...form, due_date: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, due_date: e.target.value })}
                 />
               </div>
             </div>
 
             <div className="grid gap-5 md:grid-cols-3">
-<div>
-  <label className="label">Assigned To</label>
-  <TechnicianSelect
-    value={form.assigned_to}
-    onChange={(value) => setForm({ ...form, assigned_to: value })}
-  />
-</div>
+              <div>
+                <label className="label">Assigned To</label>
+                <TechnicianSelect
+                  value={form.assigned_to}
+                  onChange={(value) => setForm({ ...form, assigned_to: value })}
+                />
               </div>
 
               <div>
@@ -464,9 +491,7 @@ export default function JobsPage() {
                   min="0"
                   step="0.01"
                   value={form.labour_cost}
-                  onChange={(e) =>
-                    setForm({ ...form, labour_cost: e.target.value })
-                  }
+                  onChange={(e) => setForm({ ...form, labour_cost: e.target.value })}
                   placeholder="0.00"
                 />
               </div>
@@ -508,30 +533,33 @@ export default function JobsPage() {
         <div className="mb-6 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
           <div>
             <h2 className="text-2xl font-black tracking-tight text-stone-950">
-              Job Lifecycle
+              Job Register
             </h2>
+
             <p className="mt-1 text-sm font-semibold text-stone-500">
-              Search, filter and progress work orders through the delivery pipeline.
+              Search, filter and open work orders.
             </p>
           </div>
 
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="flex items-center gap-3 rounded-[1.25rem] border border-stone-200 bg-white px-4 py-3 shadow-sm">
               <Search size={18} className="text-stone-400" />
+
               <input
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search jobs..."
-                className="w-full min-w-64 border-0 bg-transparent text-sm font-bold text-stone-800 outline-none placeholder:text-stone-400"
+                className="w-full min-w-60 border-0 bg-transparent text-sm font-bold text-stone-800 outline-none placeholder:text-stone-400"
               />
             </div>
 
             <select
-              className="input min-w-48"
+              className="input min-w-44"
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="all">All statuses</option>
+              <option value="active">Active jobs</option>
+              <option value="all">All jobs</option>
               <option value="new">New</option>
               <option value="booked">Booked</option>
               <option value="in_progress">In Progress</option>
@@ -544,22 +572,20 @@ export default function JobsPage() {
 
         <div className="space-y-4">
           {filteredJobs.map((job) => (
-            <JobCard key={job.id} job={job} onNextStatus={moveToNextStatus} />
+            <JobCard key={job.id} job={job} moveToNextStatus={moveToNextStatus} />
           ))}
         </div>
 
         {filteredJobs.length === 0 && (
           <div className="rounded-[1.5rem] border border-dashed border-stone-300 bg-stone-50/80 p-10 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#f3ead6] text-[#1b1a18]">
-              <Wrench size={24} />
-            </div>
+            <Wrench className="mx-auto text-stone-400" size={30} />
 
             <h3 className="mt-4 text-2xl font-black text-stone-950">
               No work orders found
             </h3>
 
             <p className="mx-auto mt-2 max-w-md text-sm font-semibold text-stone-500">
-              Try changing your filter or create the first work order for this workspace.
+              Create a work order or change the filters.
             </p>
 
             <button onClick={() => setShowForm(true)} className="btn-primary mt-5">
@@ -574,26 +600,25 @@ export default function JobsPage() {
 
 function JobCard({
   job,
-  onNextStatus,
+  moveToNextStatus,
 }: {
   job: JobRecord;
-  onNextStatus: (job: JobRecord) => void;
+  moveToNextStatus: (job: JobRecord) => void;
 }) {
-  const status = job.status || "new";
-  const nextStatus = getNextStatus(status);
   const outstanding = Number(job.amount_outstanding || 0);
+  const canMove = !["invoiced", "cancelled"].includes(job.status || "");
 
   return (
     <div className="rounded-[1.5rem] border border-stone-200 bg-white/90 p-5 shadow-sm transition hover:border-stone-300 hover:shadow-md">
-      <div className="grid gap-5 xl:grid-cols-[1fr_280px] xl:items-center">
+      <div className="grid gap-5 xl:grid-cols-[1fr_300px] xl:items-center">
         <div className="min-w-0">
           <div className="mb-3 flex flex-wrap items-center gap-2">
+            <StatusBadge value={job.status || "new"} />
+            <PriorityBadge value={job.priority || "medium"} />
+
             <span className="rounded-full bg-stone-100 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-stone-600">
               {job.job_number || "Work Order"}
             </span>
-
-            <StatusBadge value={status} />
-            <PriorityBadge value={job.priority || "medium"} />
           </div>
 
           <h3 className="truncate text-xl font-black tracking-tight text-stone-950">
@@ -615,62 +640,40 @@ function JobCard({
               <CalendarDays size={15} />
               {job.appointment_start
                 ? new Date(job.appointment_start).toLocaleString()
-                : "No appointment set"}
+                : "No appointment"}
             </p>
 
             <p className="flex items-center gap-2">
-              <Clock size={15} />
-              {job.due_date
-                ? `Due ${new Date(job.due_date).toLocaleDateString()}`
-                : "No due date"}
-            </p>
-
-            <p className="flex items-center gap-2">
-              <CheckCircle2 size={15} />
+              <UserRound size={15} />
               {job.assigned_to || "Unassigned"}
             </p>
 
-            <p className="flex items-center gap-2">
-              <MapPin size={15} />
-              <span className="truncate">
-                {job.clients?.address || "No site address"}
-              </span>
-            </p>
+            {job.clients?.address && (
+              <p className="flex items-center gap-2 md:col-span-2">
+                <MapPin size={15} />
+                {job.clients.address}
+              </p>
+            )}
           </div>
-
-          <Pipeline status={status} />
         </div>
 
         <div className="rounded-[1.25rem] bg-stone-50 p-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <p className="font-bold text-stone-400">Total</p>
-              <p className="mt-1 text-lg font-black text-stone-950">
-                ${Number(job.total_amount || 0).toFixed(2)}
-              </p>
-            </div>
-
-            <div>
-              <p className="font-bold text-stone-400">Outstanding</p>
-              <p
-                className={`mt-1 text-lg font-black ${
-                  outstanding > 0 ? "text-red-600" : "text-stone-950"
-                }`}
-              >
-                ${outstanding.toFixed(2)}
-              </p>
-            </div>
+          <div className="mb-4 grid grid-cols-3 gap-3 text-sm">
+            <AmountBlock label="Total" value={Number(job.total_amount || 0)} />
+            <AmountBlock label="Paid" value={Number(job.amount_paid || 0)} />
+            <AmountBlock label="Due" value={outstanding} alert={outstanding > 0} />
           </div>
 
-          <div className="mt-4 grid gap-2">
-            {nextStatus && (
-              <button onClick={() => onNextStatus(job)} className="btn-primary">
-                Move to {statusLabels[nextStatus]}
+          <div className="grid gap-2">
+            {canMove && (
+              <button onClick={() => moveToNextStatus(job)} className="btn-secondary">
+                Move Next
               </button>
             )}
 
-            <Link href={`/jobs/${job.id}`} className="btn-secondary">
+            <Link href={`/jobs/${job.id}`} className="btn-primary">
               Open Job
+              <ArrowRight size={15} />
             </Link>
 
             <Link href={`/invoices/${job.id}`} className="btn-secondary">
@@ -683,53 +686,65 @@ function JobCard({
   );
 }
 
-function Pipeline({ status }: { status: string }) {
-  return (
-    <div className="mt-5 grid grid-cols-5 gap-2">
-      {statusSteps.map((step) => {
-        const currentIndex = statusSteps.indexOf(status);
-        const stepIndex = statusSteps.indexOf(step);
-        const done = currentIndex >= stepIndex;
-
-        return (
-          <div key={step}>
-            <div
-              className={`h-2 rounded-full ${
-                done ? "bg-[#1b1a18]" : "bg-stone-200"
-              }`}
-            />
-            <p
-              className={`mt-2 hidden text-[10px] font-black uppercase tracking-wide md:block ${
-                done ? "text-stone-800" : "text-stone-400"
-              }`}
-            >
-              {statusLabels[step]}
-            </p>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function MiniStat({
   title,
   value,
+  icon,
   alert,
 }: {
   title: string;
-  value: number;
+  value: string | number;
+  icon: React.ReactNode;
   alert?: boolean;
 }) {
   return (
     <div className="card">
-      <p className="text-sm font-bold text-stone-500">{title}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-stone-500">{title}</p>
+
+          <p
+            className={`mt-3 text-2xl font-black tracking-tight ${
+              alert ? "text-red-600" : "text-stone-950"
+            }`}
+          >
+            {value}
+          </p>
+        </div>
+
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-2xl ${
+            alert ? "bg-red-50 text-red-700" : "bg-stone-100 text-stone-600"
+          }`}
+        >
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AmountBlock({
+  label,
+  value,
+  alert,
+}: {
+  label: string;
+  value: number;
+  alert?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs font-black uppercase tracking-wide text-stone-400">
+        {label}
+      </p>
+
       <p
-        className={`mt-3 text-3xl font-black tracking-tight ${
-          alert && value > 0 ? "text-red-600" : "text-stone-950"
+        className={`mt-1 text-base font-black ${
+          alert ? "text-red-600" : "text-stone-950"
         }`}
       >
-        {value}
+        ${value.toFixed(2)}
       </p>
     </div>
   );
@@ -773,14 +788,4 @@ function PriorityBadge({ value }: { value: string }) {
       {priorityLabels[value] || value}
     </span>
   );
-}
-
-function getNextStatus(status: string) {
-  const currentIndex = statusSteps.indexOf(status);
-
-  if (currentIndex === -1 || currentIndex === statusSteps.length - 1) {
-    return null;
-  }
-
-  return statusSteps[currentIndex + 1];
 }

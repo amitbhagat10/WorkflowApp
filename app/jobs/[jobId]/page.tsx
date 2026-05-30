@@ -1,5 +1,5 @@
 "use client";
-
+import TechnicianSelect from "@/components/TechnicianSelect";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
@@ -524,17 +524,15 @@ export default function JobDetailPage() {
             </div>
 
             <div className="grid gap-5 md:grid-cols-3">
-              <div>
-                <label className="label">Assigned To</label>
-                <input
-                  className="input"
-                  value={editForm.assigned_to}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, assigned_to: e.target.value })
-                  }
-                  placeholder="Technician name"
-                />
-              </div>
+ <div>
+  <label className="label">Assigned To</label>
+  <TechnicianSelect
+    value={editForm.assigned_to}
+    onChange={(value) =>
+      setEditForm({ ...editForm, assigned_to: value })
+    }
+  />
+</div>
 
               <div>
                 <label className="label">Appointment</label>
