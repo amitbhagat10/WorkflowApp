@@ -25,17 +25,13 @@ export default function WorkspaceBrandBar() {
     pathname.startsWith("/login") || pathname.startsWith("/auth/callback");
 
   useEffect(() => {
-    if (!hide) {
-      loadWorkspace();
-    }
+    if (!hide) loadWorkspace();
   }, [hide]);
 
   async function loadWorkspace() {
     const workspaceResult = await supabase.rpc("current_user_workspace_id");
 
-    if (workspaceResult.error || !workspaceResult.data) {
-      return;
-    }
+    if (workspaceResult.error || !workspaceResult.data) return;
 
     const { data, error } = await supabase
       .from("workspaces")
@@ -45,9 +41,7 @@ export default function WorkspaceBrandBar() {
       .eq("id", workspaceResult.data)
       .single();
 
-    if (error) {
-      return;
-    }
+    if (error) return;
 
     setWorkspace(data as WorkspaceBrand);
   }
@@ -62,20 +56,18 @@ export default function WorkspaceBrandBar() {
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
   }
 
-  if (hide || !workspace) {
-    return null;
-  }
+  if (hide || !workspace) return null;
 
   const displayName = workspace.branding_name || workspace.name;
-  const brandColor = workspace.primary_color || "#2b2926";
+  const brandColor = workspace.primary_color || "#1b1a18";
   const remainingDays = daysLeft();
 
   return (
-    <section className="no-print mb-6 rounded-[1.35rem] border border-stone-200/80 bg-white/85 px-5 py-4 shadow-sm shadow-stone-900/5 backdrop-blur-xl">
+    <section className="no-print mb-7 rounded-[1.5rem] border border-stone-200/80 bg-white/90 px-5 py-4 shadow-xl shadow-stone-900/8 backdrop-blur-xl">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-4">
           <div
-            className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-xs font-black text-white shadow-sm"
+            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-sm font-black text-white shadow-sm"
             style={{ backgroundColor: brandColor }}
           >
             {workspace.logo_url ? (
@@ -90,11 +82,11 @@ export default function WorkspaceBrandBar() {
           </div>
 
           <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-stone-400">
+            <p className="text-[11px] font-black uppercase tracking-[0.22em] text-stone-400">
               Workspace
             </p>
 
-            <h2 className="truncate text-lg font-black tracking-tight text-stone-950 md:text-xl">
+            <h2 className="truncate text-xl font-black tracking-tight text-stone-950">
               {displayName}
             </h2>
           </div>
@@ -103,7 +95,7 @@ export default function WorkspaceBrandBar() {
         <div className="flex flex-wrap items-center gap-2">
           {workspace.status === "trial" ? (
             <>
-              <span className="inline-flex items-center gap-2 rounded-full bg-[#f4efe4] px-3.5 py-2 text-[11px] font-black uppercase tracking-wide text-[#2b2926]">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#f3ead6] px-3.5 py-2 text-[11px] font-black uppercase tracking-wide text-[#1b1a18]">
                 <ShieldCheck size={13} />
                 Trial workspace
               </span>

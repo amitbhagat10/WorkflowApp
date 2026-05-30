@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2b2926",
+  themeColor: "#1b1a18",
   width: "device-width",
   initialScale: 1,
 };
@@ -36,20 +36,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-[#f7f3ea] text-stone-950">
+      <body className="bg-[#f3f4f1] text-stone-950 antialiased">
         <PwaRegister />
 
         <AuthGuard>
           <MobileTopBar />
 
-          <div className="min-h-screen md:flex">
+          <div className="min-h-screen bg-[radial-gradient(circle_at_80%_0%,rgba(216,189,130,0.10),transparent_24%),radial-gradient(circle_at_0%_0%,rgba(27,26,24,0.08),transparent_28%),linear-gradient(135deg,#f8f8f5_0%,#f1f2ef_45%,#e8e7e2_100%)] md:flex">
             <Nav />
 
-            <main className="min-w-0 flex-1 px-4 pb-28 pt-24 md:px-7 md:py-7">
-              <div className="w-full">
-                <WorkspaceBrandBar />
-                {children}
-              </div>
+            <main className="min-w-0 flex-1 px-4 pb-28 pt-24 md:px-8 md:py-7">
+              <WorkspaceBrandBar />
+              {children}
             </main>
           </div>
 
