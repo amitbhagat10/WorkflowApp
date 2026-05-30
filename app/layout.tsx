@@ -36,7 +36,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="bg-[#faf8f2] text-stone-950">
+      <body className="bg-[#f7f3ea] text-stone-950">
         <PwaRegister />
 
         <AuthGuard>
@@ -45,9 +45,11 @@ export default function RootLayout({
           <div className="min-h-screen md:flex">
             <Nav />
 
-            <main className="w-full px-4 pb-28 pt-24 md:ml-72 md:px-8 md:py-8">
-              <WorkspaceBrandBar />
-              {children}
+            <main className="min-w-0 flex-1 px-4 pb-28 pt-24 md:px-7 md:py-7">
+              <div className="w-full">
+                <WorkspaceBrandBar />
+                {children}
+              </div>
             </main>
           </div>
 

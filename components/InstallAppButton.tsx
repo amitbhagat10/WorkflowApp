@@ -56,7 +56,7 @@ export default function InstallAppButton() {
       <button
         type="button"
         onClick={handleInstall}
-        className="inline-flex items-center gap-2 rounded-full bg-stone-950 px-4 py-2 text-xs font-black uppercase tracking-wide text-white shadow-sm transition hover:bg-stone-800"
+        className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3.5 py-2 text-[11px] font-black uppercase tracking-wide text-stone-600 shadow-sm transition hover:border-stone-300 hover:bg-stone-50"
       >
         <Smartphone size={14} />
         Install App
