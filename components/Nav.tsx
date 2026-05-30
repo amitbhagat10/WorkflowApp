@@ -24,6 +24,7 @@ const baseLinks = [
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/jobs", label: "Work Orders", icon: Wrench },
   { href: "/calendar", label: "Schedule", icon: CalendarDays },
+  { href: "/team", label: "Team", icon: Users },
   { href: "/payments", label: "Payments", icon: CreditCard },
   { href: "/notifications", label: "Messages", icon: Bell },
   { href: "/invoices", label: "Invoices", icon: FileText },
